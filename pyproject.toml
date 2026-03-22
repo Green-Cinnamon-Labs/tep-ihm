@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "tep-ihm"
+version = "0.1.0"
+description = "IHM (Interface Homem-Máquina) para o experimento Tennessee Eastman — dashboard web com métricas da planta e ações do operator K8s"
+authors = []
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.115"
+uvicorn = {extras = ["standard"], version = "^0.34"}
+websockets = "^15.0"
+grpcio = "^1.72"
+grpcio-tools = "^1.72"
+protobuf = "^6.30"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.11"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+tep-ihm = "src.server:main"

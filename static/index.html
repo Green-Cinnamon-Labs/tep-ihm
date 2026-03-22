@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TEP IHM — Tennessee Eastman</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <h1>TEP IHM</h1>
+        <div id="status">
+            <span id="connection-status" class="status-disconnected">desconectado</span>
+            <span id="sim-time">t = —</span>
+        </div>
+    </header>
+
+    <main>
+        <!-- Painel de alarmes -->
+        <section id="alarms-panel" class="panel">
+            <h2>Alarmes</h2>
+            <div id="alarms-list">Nenhum alarme ativo</div>
+        </section>
+
+        <!-- Gráficos XMEAS -->
+        <section id="xmeas-panel" class="panel">
+            <h2>XMEAS — Medições da Planta</h2>
+            <div class="chart-grid">
+                <div class="chart-container">
+                    <canvas id="chart-pressure"></canvas>
+                </div>
+                <div class="chart-container">
+                    <canvas id="chart-temperature"></canvas>
+                </div>
+                <div class="chart-container">
+                    <canvas id="chart-levels"></canvas>
+                </div>
+                <div class="chart-container">
+                    <canvas id="chart-flows"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Valores atuais -->
+        <section id="values-panel" class="panel">
+            <h2>Valores Atuais</h2>
+            <div class="values-grid">
+                <div>
+                    <h3>XMEAS (medições)</h3>
+                    <table id="xmeas-table"></table>
+                </div>
+                <div>
+                    <h3>XMV (manipuladas)</h3>
+                    <table id="xmv-table"></table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Painel do operator (placeholder) -->
+        <section id="operator-panel" class="panel">
+            <h2>Operator K8s</h2>
+            <div id="operator-placeholder">
+                Painel do operator será ativado com a issue #41
+            </div>
+        </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
