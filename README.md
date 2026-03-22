@@ -15,33 +15,30 @@ Hoje apenas o painel da planta esta implementado. O painel do operator sera ativ
 
 ## Como funciona
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│  Navegador (localhost:8080)                                  │
-│  ┌─────────────────────────────────────────────────────────┐ │
-│  │  Chart.js — graficos de pressao, temperatura, nivel,    │ │
-│  │  vazao atualizando em tempo real via WebSocket           │ │
-│  │  Tabelas de XMEAS e XMV, painel de alarmes              │ │
-│  └────────────────────────┬────────────────────────────────┘ │
-│                           │ WebSocket (ws://localhost:8080/ws)│
-│  ┌────────────────────────┴────────────────────────────────┐ │
-│  │  Backend Python (FastAPI + Uvicorn)                      │ │
-│  │                                                          │ │
-│  │  1. Conecta na planta via gRPC StreamMetrics             │ │
-│  │  2. Recebe metricas a cada 500ms                         │ │
-│  │  3. Converte protobuf → JSON                             │ │
-│  │  4. Faz broadcast pra todos os WebSockets conectados     │ │
-│  └────────────────────────┬────────────────────────────────┘ │
-│                           │ gRPC (planta:50051)              │
-└───────────────────────────┼──────────────────────────────────┘
-                            │
-              ┌─────────────┴─────────────┐
-              │  te-plant (Rust)           │
-              │  Container Docker          │
-              │  gRPC server :50051        │
-              │  StreamMetrics → XMEAS,    │
-              │  XMV, alarmes, ISD         │
-              └───────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Browser["Navegador (localhost:8080)"]
+        UI["Chart.js — gráficos de pressão, temperatura, nível e vazão
+atualizando em tempo real via WebSocket
+
+Tabelas de XMEAS e XMV
+Painel de alarmes"]
+
+        API["Backend Python (FastAPI + Uvicorn)
+
+1. Conecta na planta via gRPC StreamMetrics
+2. Recebe métricas a cada 500ms
+3. Converte protobuf → JSON
+4. Faz broadcast pra todos os WebSockets conectados"]
+    end
+
+    Plant["te-plant (Rust)
+Container Docker
+gRPC server :50051
+StreamMetrics → XMEAS, XMV, alarmes, ISD"]
+
+    UI -->|"WebSocket\n(ws://localhost:8080/ws)"| API
+    API -->|"gRPC\n(planta:50051)"| Plant
 ```
 
 ### Fluxo de dados
