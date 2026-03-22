@@ -34,7 +34,7 @@ latest_snapshot: dict | None = None
 
 async def plant_stream_loop():
     """Loop que conecta na planta via gRPC e faz broadcast pros WebSockets."""
-    global latest_snapshot
+    global latest_snapshot, connected_clients
 
     while True:
         try:
