@@ -5,180 +5,235 @@
 }
 
 body {
-    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-family: 'Consolas', 'Fira Code', 'Courier New', monospace;
     background: #0f1117;
-    color: #e0e0e0;
+    color: #c0c0c0;
     min-height: 100vh;
+    font-size: 13px;
 }
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
 
 header {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: 16px 24px;
+    gap: 16px;
+    padding: 8px 16px;
     background: #1a1d27;
-    border-bottom: 1px solid #2a2d3a;
+    border: 1px solid #2a2d3a;
+    border-radius: 4px;
+    margin: 8px;
 }
 
-header h1 {
-    font-size: 1.3rem;
-    font-weight: 600;
+.header-title {
+    font-weight: bold;
     color: #4fc3f7;
+    font-size: 14px;
 }
 
-#status {
-    display: flex;
-    gap: 20px;
-    align-items: center;
-    font-size: 0.9rem;
+.header-info {
+    color: #999;
 }
 
-#sim-time {
-    color: #aaa;
-    font-family: 'Consolas', monospace;
+.status-tag {
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: bold;
+    font-size: 12px;
+}
+
+.status-ok {
+    color: #66bb6a;
+    border: 1px solid #66bb6a;
+}
+
+.status-alarm {
+    color: #ef5350;
+    border: 1px solid #ef5350;
 }
 
 .status-connected {
     color: #66bb6a;
 }
 
-.status-connected::before {
-    content: '';
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    background: #66bb6a;
-    border-radius: 50%;
-    margin-right: 6px;
-}
-
 .status-disconnected {
     color: #ef5350;
 }
 
-.status-disconnected::before {
-    content: '';
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    background: #ef5350;
-    border-radius: 50%;
-    margin-right: 6px;
+.isd-banner {
+    background: #b71c1c;
+    color: white;
+    padding: 10px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 16px;
+    letter-spacing: 2px;
+    margin: 0 8px;
 }
 
+/* ── Main ───────────────────────────────────────────────────────────────── */
+
 main {
-    padding: 20px 24px;
+    padding: 0 8px 8px;
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 8px;
 }
 
 .panel {
     background: #1a1d27;
     border: 1px solid #2a2d3a;
-    border-radius: 8px;
-    padding: 16px 20px;
+    border-radius: 4px;
+    padding: 8px 12px;
 }
 
 .panel h2 {
-    font-size: 1rem;
-    font-weight: 500;
-    color: #90a4ae;
-    margin-bottom: 12px;
+    font-size: 11px;
+    font-weight: bold;
+    color: #78909c;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #2a2d3a;
 }
 
-/* Alarmes */
-#alarms-panel {
-    border-left: 3px solid #2a2d3a;
+/* ── Row splits ─────────────────────────────────────────────────────────── */
+
+.row-split {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 8px;
 }
 
-#alarms-panel.has-alarms {
-    border-left-color: #ef5350;
-    background: #1a1117;
+.row-split-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
 }
 
-#alarms-list {
-    color: #666;
-    font-size: 0.9rem;
+/* ── Solver ──────────────────────────────────────────────────────────────── */
+
+.kv-table {
+    width: 100%;
+}
+
+.kv-table td {
+    padding: 2px 0;
+}
+
+.kv-table td:first-child {
+    color: #555;
+    width: 80px;
+}
+
+.kv-table td:last-child {
+    text-align: right;
+}
+
+.solver-steady { color: #66bb6a; }
+.solver-slow   { color: #ffa726; }
+.solver-fast   { color: #ef5350; }
+
+/* ── Alarms ──────────────────────────────────────────────────────────────── */
+
+.alarms-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 24px;
 }
 
 .alarm-item {
-    color: #ef5350;
-    padding: 4px 0;
-    font-weight: 500;
+    padding: 1px 0;
+    white-space: nowrap;
 }
 
-/* Gráficos */
+.alarm-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+.alarm-active .alarm-indicator {
+    background: #ef5350;
+}
+
+.alarm-active .alarm-label {
+    color: #ef5350;
+    font-weight: bold;
+}
+
+.alarm-inactive .alarm-indicator {
+    background: #66bb6a;
+}
+
+.alarm-inactive .alarm-label {
+    color: #555;
+}
+
+.alarm-active .alarm-status { color: #ef5350; font-weight: bold; }
+.alarm-inactive .alarm-status { color: #66bb6a; }
+
+#alarms-panel.has-alarms {
+    border-color: #ef5350;
+}
+
+/* ── Signal tables ───────────────────────────────────────────────────────── */
+
+.signal-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.signal-table thead th {
+    text-align: left;
+    color: #fff;
+    font-weight: bold;
+    padding: 3px 6px;
+    border-bottom: 1px solid #2a2d3a;
+}
+
+.signal-table tbody td {
+    padding: 2px 6px;
+    border-bottom: 1px solid #1a1d27;
+}
+
+.signal-table .tag-xmeas { color: #ffa726; }
+.signal-table .tag-xmv { color: #66bb6a; }
+.signal-table .val { text-align: right; color: #e0e0e0; }
+.signal-table .unit { color: #555; }
+.signal-table .name { color: #78909c; }
+
+/* ── Charts ──────────────────────────────────────────────────────────────── */
+
 .chart-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 16px;
+    gap: 8px;
 }
 
 .chart-container {
     background: #12141c;
-    border-radius: 6px;
-    padding: 12px;
-    height: 260px;
+    border-radius: 4px;
+    padding: 8px;
+    height: 220px;
 }
 
-/* Valores */
-.values-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
-}
+/* ── Operator placeholder ────────────────────────────────────────────────── */
 
-.values-grid h3 {
-    font-size: 0.85rem;
-    color: #78909c;
-    margin-bottom: 8px;
-}
-
-table {
-    width: 100%;
-    font-size: 0.8rem;
-    font-family: 'Consolas', monospace;
-    border-collapse: collapse;
-}
-
-td {
-    padding: 3px 8px;
-    border-bottom: 1px solid #1e2130;
-}
-
-td:first-child {
-    color: #78909c;
-    width: 40%;
-}
-
-td:last-child {
-    color: #e0e0e0;
-    text-align: right;
-}
-
-/* Operator placeholder */
-#operator-placeholder {
-    color: #555;
+.placeholder {
+    color: #444;
     font-style: italic;
-    font-size: 0.9rem;
 }
 
-/* ISD banner */
-.isd-banner {
-    background: #b71c1c;
-    color: white;
-    padding: 12px 24px;
-    text-align: center;
-    font-weight: 600;
-    font-size: 1.1rem;
-    letter-spacing: 1px;
-}
+/* ── Responsive ──────────────────────────────────────────────────────────── */
 
-@media (max-width: 800px) {
-    .chart-grid, .values-grid {
-        grid-template-columns: 1fr;
-    }
+@media (max-width: 900px) {
+    .row-split { grid-template-columns: 1fr; }
+    .row-split-3 { grid-template-columns: 1fr; }
+    .chart-grid { grid-template-columns: 1fr; }
 }

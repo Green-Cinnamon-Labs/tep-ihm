@@ -1,0 +1,29 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "IHM: planta real (gRPC)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "src.server",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PLANT_ADDRESS": "localhost:50051",
+                "PORT": "8080"
+            }
+        },
+        {
+            "name": "IHM: replay CSV (sem planta)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "src.server",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "CSV_REPLAY": "${workspaceFolder}/../fork-tennesseeEastman/docs/csvs/simulation_log_13.csv",
+                "PORT": "8080"
+            }
+        }
+    ]
+}

@@ -1,3 +1,5 @@
+# docker build -t tep-ihm:latest .
+# docker run --rm -p 8080:8080 tep-ihm:latest
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -8,7 +10,7 @@ RUN pip install --no-cache-dir poetry && \
 
 # Copiar dependencias primeiro (cache de camada)
 COPY pyproject.toml poetry.lock ./
-RUN poetry install --no-dev --no-interaction
+RUN poetry install --only main --no-interaction
 
 # Copiar proto e gerar stubs
 COPY proto/ proto/
