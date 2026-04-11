@@ -92,7 +92,7 @@ Tanto o backend quanto o frontend tem reconexao automatica. Voce pode iniciar a 
 ### Externos (nao sao pacotes Python)
 
 - **Docker** — pra rodar a planta como container
-- **Proto file** — `proto/tep/v1/plant.proto` copiado do repo `fork-tennesseeEastman`. Os stubs em `gen/` sao gerados a partir dele e nao vao pro git.
+- **Proto file** — `proto/tep/v1/plant.proto` copiado do repo `tep-plant`. Os stubs em `gen/` sao gerados a partir dele e nao vao pro git.
 
 ## Setup
 

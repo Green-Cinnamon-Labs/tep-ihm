@@ -21,7 +21,7 @@
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}",
             "env": {
-                "CSV_REPLAY": "${workspaceFolder}/../fork-tennesseeEastman/docs/csvs/simulation_log_13.csv",
+                "CSV_REPLAY": "${workspaceFolder}/../tep-plant/docs/csvs/simulation_log_13.csv",
                 "PORT": "8080"
             }
         }
