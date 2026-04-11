@@ -30,8 +30,28 @@ const XMEAS_META = [
     { tag: "XMEAS(18)", name: "Stripper Temperature",   unit: "\u00b0C" },
     { tag: "XMEAS(19)", name: "Stripper Steam Flow",    unit: "kg/hr" },
     { tag: "XMEAS(20)", name: "Compressor Work",        unit: "kW" },
-    { tag: "XMEAS(21)", name: "Reactor CW Outlet Temp", unit: "\u00b0C" },
-    { tag: "XMEAS(22)", name: "Sep CW Outlet Temp",     unit: "\u00b0C" },
+    { tag: "XMEAS(21)", name: "Reactor CW Outlet Temp",       unit: "\u00b0C" },
+    { tag: "XMEAS(22)", name: "Sep CW Outlet Temp",           unit: "\u00b0C" },
+    // Tabela 5 — analisadores (amostragem periódica)
+    { tag: "XMEAS(23)", name: "Reactor A Composition",        unit: "mol%" },
+    { tag: "XMEAS(24)", name: "Reactor B Composition",        unit: "mol%" },
+    { tag: "XMEAS(25)", name: "Reactor C Composition",        unit: "mol%" },
+    { tag: "XMEAS(26)", name: "Reactor D Composition",        unit: "mol%" },
+    { tag: "XMEAS(27)", name: "Reactor E Composition",        unit: "mol%" },
+    { tag: "XMEAS(28)", name: "Reactor F Composition",        unit: "mol%" },
+    { tag: "XMEAS(29)", name: "Purge A Composition",          unit: "mol%" },
+    { tag: "XMEAS(30)", name: "Purge B Composition",          unit: "mol%" },
+    { tag: "XMEAS(31)", name: "Purge C Composition",          unit: "mol%" },
+    { tag: "XMEAS(32)", name: "Purge D Composition",          unit: "mol%" },
+    { tag: "XMEAS(33)", name: "Purge E Composition",          unit: "mol%" },
+    { tag: "XMEAS(34)", name: "Purge F Composition",          unit: "mol%" },
+    { tag: "XMEAS(35)", name: "Purge G Composition",          unit: "mol%" },
+    { tag: "XMEAS(36)", name: "Purge H Composition",          unit: "mol%" },
+    { tag: "XMEAS(37)", name: "Product D Composition",        unit: "mol%" },
+    { tag: "XMEAS(38)", name: "Product E Composition",        unit: "mol%" },
+    { tag: "XMEAS(39)", name: "Product F Composition",        unit: "mol%" },
+    { tag: "XMEAS(40)", name: "Product G Composition",        unit: "mol%" },
+    { tag: "XMEAS(41)", name: "Product H Composition",        unit: "mol%" },
 ];
 
 const XMV_META = [
@@ -138,6 +158,61 @@ function connect() {
 
 // ── Update ───────────────────────────────────────────────────────────────────
 
+// ── Operator panel ───────────────────────────────────────────────────────────
+
+const $opPhase = document.getElementById('op-phase');
+const $opTime = document.getElementById('op-time');
+const $opIsd = document.getElementById('op-isd');
+const $opReconcile = document.getElementById('op-reconcile');
+const $opLastAction = document.getElementById('op-last-action');
+const $opVarsTbody = document.getElementById('op-vars-tbody');
+
+function renderOperator(op) {
+    if (!op) {
+        $opPhase.textContent = 'não conectado';
+        return;
+    }
+
+    $opPhase.textContent = op.phase || '--';
+    $opPhase.className = op.phase === 'Alarm' || op.phase === 'Shutdown' ? 'status-alarm' : '';
+
+    $opTime.textContent = op.plantTime != null ? `${op.plantTime.toFixed(2)} h` : '--';
+    $opIsd.textContent = op.isdActive ? 'SIM' : 'não';
+    $opIsd.className = op.isdActive ? 'status-alarm' : '';
+
+    if (op.lastReconcileTime) {
+        const d = new Date(op.lastReconcileTime);
+        $opReconcile.textContent = d.toLocaleTimeString();
+    } else {
+        $opReconcile.textContent = '--';
+    }
+
+    if (op.lastAction) {
+        const a = op.lastAction;
+        $opLastAction.textContent = `${a.ruleName}: ${a.controllerID}.${a.parameter} → ${a.value}`;
+    } else {
+        $opLastAction.textContent = 'nenhuma';
+    }
+
+    // Policy variables table
+    const vars = op.variables || [];
+    $opVarsTbody.innerHTML = vars.map(v => {
+        const meta = XMEAS_META[v.xmeasIndex] || { tag: `XMEAS(${v.xmeasIndex + 1})`, name: '', unit: '' };
+        const inRangeCls = v.inRange ? 'alarm-inactive' : 'alarm-active';
+        const inRangeText = v.inRange ? 'ok' : 'OUT';
+        const trendIcon = { Rising: '↑', Falling: '↓', Stable: '→' }[v.trend] || '?';
+        return `<tr class="${inRangeCls}">
+            <td>${v.name}</td>
+            <td class="tag-xmeas">${meta.tag}</td>
+            <td class="val">${v.value.toFixed(3)} ${meta.unit}</td>
+            <td>${inRangeText}</td>
+            <td>${trendIcon}</td>
+        </tr>`;
+    }).join('');
+}
+
+// ── Update ───────────────────────────────────────────────────────────────────
+
 function update(data) {
     const { t_h, xmeas, xmv, alarms, deriv_norm, isd_active } = data;
 
@@ -209,6 +284,9 @@ function update(data) {
             <td class="name">${m.name}</td>
         </tr>`;
     }).join('');
+
+    // Operator panel
+    renderOperator(data.operator);
 }
 
 function updateAlarms(alarms) {

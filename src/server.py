@@ -22,14 +22,20 @@ from fastapi.responses import FileResponse
 PLANT_ADDRESS = os.environ.get("PLANT_ADDRESS", "localhost:50051")
 STREAM_INTERVAL_MS = float(os.environ.get("STREAM_INTERVAL_MS", "500"))
 CSV_REPLAY = os.environ.get("CSV_REPLAY", "")
+K8S_ENABLED = os.environ.get("K8S_ENABLED", "true").lower() not in ("0", "false", "no")
+K8S_NAMESPACE = os.environ.get("K8S_NAMESPACE", "default")
+K8S_CR_NAME = os.environ.get("K8S_CR_NAME", "tep-baseline")
 
 connected_clients: set[WebSocket] = set()
 latest_snapshot: dict | None = None
+latest_operator_state: dict | None = None
 
 
 async def broadcast(snapshot: dict):
     """Envia snapshot pra todos os WebSockets conectados."""
     global latest_snapshot, connected_clients
+    # Enrich snapshot with latest operator state
+    snapshot["operator"] = latest_operator_state
     latest_snapshot = snapshot
     msg = json.dumps(snapshot)
     disconnected = set()
@@ -137,16 +143,81 @@ async def plant_stream_loop():
         await asyncio.sleep(3)
 
 
+# ── Kubernetes operator watch ─────────────────────────────────────────────────
+
+async def operator_watch_loop():
+    """
+    Mantém conexão com a API do Kubernetes via watch.Watch() no CR PLCMachine.
+    Atualiza latest_operator_state sempre que o status do CR mudar.
+    Roda em background; se falhar, espera 10s e tenta novamente.
+
+    Requer:
+    - KUBECONFIG configurado no ambiente (fora do cluster)
+    - Ou ServiceAccount com permissão de get/watch em plcmachines (dentro do cluster)
+    """
+    global latest_operator_state
+
+    try:
+        from kubernetes import client as k8s_client, config as k8s_config, watch as k8s_watch
+    except ImportError:
+        print("[ihm] kubernetes lib não instalada — painel operator desabilitado")
+        return
+
+    print(f"[ihm] iniciando watch K8s: {K8S_NAMESPACE}/{K8S_CR_NAME}")
+
+    while True:
+        try:
+            try:
+                k8s_config.load_incluster_config()
+            except k8s_config.ConfigException:
+                k8s_config.load_kube_config()
+
+            custom = k8s_client.CustomObjectsApi()
+            w = k8s_watch.Watch()
+
+            for event in w.stream(
+                custom.list_namespaced_custom_object,
+                group="infrastructure.greenlabs.io",
+                version="v1alpha1",
+                namespace=K8S_NAMESPACE,
+                plural="plcmachines",
+                field_selector=f"metadata.name={K8S_CR_NAME}",
+                timeout_seconds=60,
+            ):
+                obj = event.get("object", {})
+                status = obj.get("status", {})
+                spec = obj.get("spec", {})
+
+                latest_operator_state = {
+                    "phase": status.get("phase", "Unknown"),
+                    "plantTime": status.get("plantTime"),
+                    "isdActive": status.get("isdActive", False),
+                    "lastReconcileTime": status.get("lastReconcileTime"),
+                    "lastAction": status.get("lastAction"),
+                    "variables": status.get("variables", []),
+                    "observation": status.get("observation", {}),
+                    "operatingRanges": spec.get("operatingRanges", []),
+                }
+
+        except Exception as e:
+            print(f"[ihm] K8s watch erro: {e} — reconectando em 10s...")
+            await asyncio.sleep(10)
+
+
 # ── FastAPI ───────────────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    tasks = []
     if CSV_REPLAY:
-        task = asyncio.create_task(csv_replay_loop())
+        tasks.append(asyncio.create_task(csv_replay_loop()))
     else:
-        task = asyncio.create_task(plant_stream_loop())
+        tasks.append(asyncio.create_task(plant_stream_loop()))
+    if K8S_ENABLED:
+        tasks.append(asyncio.create_task(operator_watch_loop()))
     yield
-    task.cancel()
+    for t in tasks:
+        t.cancel()
 
 
 app = FastAPI(lifespan=lifespan)

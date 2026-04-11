@@ -71,7 +71,18 @@
             <section class="panel">
                 <h2>Operator K8s</h2>
                 <div id="operator-content">
-                    <p class="placeholder">Placeholder — ativado com a issue #44</p>
+                    <table id="operator-meta-table" class="kv-table">
+                        <tr><td>Phase</td><td id="op-phase">--</td></tr>
+                        <tr><td>Plant Time</td><td id="op-time">--</td></tr>
+                        <tr><td>ISD</td><td id="op-isd">--</td></tr>
+                        <tr><td>Last Reconcile</td><td id="op-reconcile">--</td></tr>
+                        <tr><td>Last Action</td><td id="op-last-action">--</td></tr>
+                    </table>
+                    <h3 class="subpanel-title">Policy Variables</h3>
+                    <table id="operator-vars-table" class="signal-table">
+                        <thead><tr><th>Name</th><th>XMEAS</th><th>Value</th><th>In Range</th><th>Trend</th></tr></thead>
+                        <tbody id="op-vars-tbody"></tbody>
+                    </table>
                 </div>
             </section>
         </div>
