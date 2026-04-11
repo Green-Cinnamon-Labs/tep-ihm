@@ -25,6 +25,7 @@ CSV_REPLAY = os.environ.get("CSV_REPLAY", "")
 K8S_ENABLED = os.environ.get("K8S_ENABLED", "true").lower() not in ("0", "false", "no")
 K8S_NAMESPACE = os.environ.get("K8S_NAMESPACE", "default")
 K8S_CR_NAME = os.environ.get("K8S_CR_NAME", "tep-baseline")
+K8S_SERVER = os.environ.get("K8S_SERVER", "")  # ex: https://host.docker.internal:6443
 
 connected_clients: set[WebSocket] = set()
 latest_snapshot: dict | None = None
@@ -145,20 +146,40 @@ async def plant_stream_loop():
 
 # ── Kubernetes operator watch ─────────────────────────────────────────────────
 
-async def operator_watch_loop():
-    """
-    Mantém conexão com a API do Kubernetes via watch.Watch() no CR PLCMachine.
-    Atualiza latest_operator_state sempre que o status do CR mudar.
-    Roda em background; se falhar, espera 10s e tenta novamente.
+def _k8s_watch_sync(custom, w):
+    """Executa o watch síncrono do K8s — chamado via asyncio.to_thread para não bloquear o event loop."""
+    global latest_operator_state
+    for event in w.stream(
+        custom.list_namespaced_custom_object,
+        group="infrastructure.greenlabs.io",
+        version="v1alpha1",
+        namespace=K8S_NAMESPACE,
+        plural="plcmachines",
+        field_selector=f"metadata.name={K8S_CR_NAME}",
+        timeout_seconds=60,
+    ):
+        obj = event.get("object", {})
+        status = obj.get("status", {})
+        spec = obj.get("spec", {})
+        latest_operator_state = {
+            "phase": status.get("phase", "Unknown"),
+            "plantTime": status.get("plantTime"),
+            "isdActive": status.get("isdActive", False),
+            "lastReconcileTime": status.get("lastReconcileTime"),
+            "lastAction": status.get("lastAction"),
+            "variables": status.get("variables", []),
+            "observation": status.get("observation", {}),
+            "operatingRanges": spec.get("operatingRanges", []),
+        }
 
-    Requer:
-    - KUBECONFIG configurado no ambiente (fora do cluster)
-    - Ou ServiceAccount com permissão de get/watch em plcmachines (dentro do cluster)
-    """
+
+async def operator_watch_loop():
     global latest_operator_state
 
     try:
+        import urllib3
         from kubernetes import client as k8s_client, config as k8s_config, watch as k8s_watch
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     except ImportError:
         print("[ihm] kubernetes lib não instalada — painel operator desabilitado")
         return
@@ -171,33 +192,17 @@ async def operator_watch_loop():
                 k8s_config.load_incluster_config()
             except k8s_config.ConfigException:
                 k8s_config.load_kube_config()
+                if K8S_SERVER:
+                    cfg = k8s_client.Configuration.get_default_copy()
+                    cfg.host = K8S_SERVER
+                    cfg.verify_ssl = False
+                    cfg.ssl_ca_cert = None
+                    k8s_client.Configuration.set_default(cfg)
 
             custom = k8s_client.CustomObjectsApi()
             w = k8s_watch.Watch()
 
-            for event in w.stream(
-                custom.list_namespaced_custom_object,
-                group="infrastructure.greenlabs.io",
-                version="v1alpha1",
-                namespace=K8S_NAMESPACE,
-                plural="plcmachines",
-                field_selector=f"metadata.name={K8S_CR_NAME}",
-                timeout_seconds=60,
-            ):
-                obj = event.get("object", {})
-                status = obj.get("status", {})
-                spec = obj.get("spec", {})
-
-                latest_operator_state = {
-                    "phase": status.get("phase", "Unknown"),
-                    "plantTime": status.get("plantTime"),
-                    "isdActive": status.get("isdActive", False),
-                    "lastReconcileTime": status.get("lastReconcileTime"),
-                    "lastAction": status.get("lastAction"),
-                    "variables": status.get("variables", []),
-                    "observation": status.get("observation", {}),
-                    "operatingRanges": spec.get("operatingRanges", []),
-                }
+            await asyncio.to_thread(_k8s_watch_sync, custom, w)
 
         except Exception as e:
             print(f"[ihm] K8s watch erro: {e} — reconectando em 10s...")
