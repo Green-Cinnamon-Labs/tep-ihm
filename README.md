@@ -6,10 +6,10 @@ IHM (Interface Homem-Maquina) para o experimento Tennessee Eastman. Dashboard we
 
 A IHM conecta em duas fontes de dados e apresenta tudo numa interface web unica:
 
-| Fonte | Protocolo | O que mostra |
-|-------|-----------|-------------|
-| Planta TEP | gRPC `StreamMetrics` | 22 XMEAS, 12 XMV, alarmes, ISD, tempo de simulacao |
-| Operator K8s | API do Kubernetes (watch) | Fase, acoes tomadas, faixas configuradas |
+| Fonte        | Protocolo                 | O que mostra                                       |
+| ------------ | ------------------------- | -------------------------------------------------- |
+| Planta TEP   | gRPC `StreamMetrics`      | 22 XMEAS, 12 XMV, alarmes, ISD, tempo de simulacao |
+| Operator K8s | API do Kubernetes (watch) | Fase, acoes tomadas, faixas configuradas           |
 
 Hoje apenas o painel da planta esta implementado. O painel do operator sera ativado com a issue #41, quando a logica supervisoria estiver funcionando.
 
@@ -55,15 +55,15 @@ Tanto o backend quanto o frontend tem reconexao automatica. Voce pode iniciar a 
 
 ## Stack
 
-| Camada | Tecnologia | Por que |
-|--------|-----------|---------|
-| Backend | **FastAPI** (Python) | Framework async com suporte nativo a WebSocket. Leve e sem boilerplate. |
-| Servidor ASGI | **Uvicorn** | Servidor async de alta performance pra FastAPI. |
-| gRPC client | **grpcio** + stubs gerados por **grpcio-tools** | Consome o `StreamMetrics` da planta. Os stubs sao gerados a partir do mesmo `.proto` da planta. |
-| Serialização | **Protocol Buffers** (protobuf) | Formato binario usado pela planta. O backend converte pra JSON antes de enviar pro frontend. |
-| Comunicacao tempo real | **WebSocket** | Conexao persistente entre backend e frontend. Mais eficiente que polling HTTP pra dados que mudam a cada 500ms. |
-| Graficos | **Chart.js 4** (CDN) | Biblioteca de graficos leve, sem build step. Renderiza diretamente no canvas do navegador. |
-| Frontend | **HTML + CSS + JS puro** | Sem framework (React, Vue, etc). O dashboard é simples o suficiente pra nao precisar. |
+| Camada                 | Tecnologia                                      | Por que                                                                                                         |
+| ---------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Backend                | **FastAPI** (Python)                            | Framework async com suporte nativo a WebSocket. Leve e sem boilerplate.                                         |
+| Servidor ASGI          | **Uvicorn**                                     | Servidor async de alta performance pra FastAPI.                                                                 |
+| gRPC client            | **grpcio** + stubs gerados por **grpcio-tools** | Consome o `StreamMetrics` da planta. Os stubs sao gerados a partir do mesmo `.proto` da planta.                 |
+| Serialização           | **Protocol Buffers** (protobuf)                 | Formato binario usado pela planta. O backend converte pra JSON antes de enviar pro frontend.                    |
+| Comunicacao tempo real | **WebSocket**                                   | Conexao persistente entre backend e frontend. Mais eficiente que polling HTTP pra dados que mudam a cada 500ms. |
+| Graficos               | **Chart.js 4** (CDN)                            | Biblioteca de graficos leve, sem build step. Renderiza diretamente no canvas do navegador.                      |
+| Frontend               | **HTML + CSS + JS puro**                        | Sem framework (React, Vue, etc). O dashboard é simples o suficiente pra nao precisar.                           |
 
 ## Dependencias
 
@@ -74,20 +74,20 @@ Tanto o backend quanto o frontend tem reconexao automatica. Voce pode iniciar a 
 
 ### Pacotes Python (gerenciados pelo Poetry)
 
-| Pacote | Versao | Uso |
-|--------|--------|-----|
-| fastapi | ^0.115 | Framework web async |
-| uvicorn[standard] | ^0.34 | Servidor ASGI |
-| websockets | ^15.0 | Implementacao WebSocket pro Uvicorn |
-| grpcio | ^1.72 | Client gRPC |
-| grpcio-tools | ^1.72 | Gerador de stubs Python a partir do `.proto` |
-| protobuf | ^6.30 | Runtime protobuf |
+| Pacote            | Versao | Uso                                          |
+| ----------------- | ------ | -------------------------------------------- |
+| fastapi           | ^0.115 | Framework web async                          |
+| uvicorn[standard] | ^0.34  | Servidor ASGI                                |
+| websockets        | ^15.0  | Implementacao WebSocket pro Uvicorn          |
+| grpcio            | ^1.72  | Client gRPC                                  |
+| grpcio-tools      | ^1.72  | Gerador de stubs Python a partir do `.proto` |
+| protobuf          | ^6.30  | Runtime protobuf                             |
 
 ### Dev
 
-| Pacote | Uso |
-|--------|-----|
-| ruff | Linter e formatter |
+| Pacote | Uso                |
+| ------ | ------------------ |
+| ruff   | Linter e formatter |
 
 ### Externos (nao sao pacotes Python)
 
@@ -115,11 +115,11 @@ Acesse `http://localhost:8080`
 
 ### Variaveis de ambiente
 
-| Variavel | Default | Descricao |
-|----------|---------|-----------|
-| `PLANT_ADDRESS` | `localhost:50051` | Endereco gRPC da planta |
-| `STREAM_INTERVAL_MS` | `500` | Intervalo de amostragem do stream (ms) |
-| `PORT` | `8080` | Porta HTTP do dashboard |
+| Variavel             | Default           | Descricao                              |
+| -------------------- | ----------------- | -------------------------------------- |
+| `PLANT_ADDRESS`      | `localhost:50051` | Endereco gRPC da planta                |
+| `STREAM_INTERVAL_MS` | `500`             | Intervalo de amostragem do stream (ms) |
+| `PORT`               | `8080`            | Porta HTTP do dashboard                |
 
 ## Estrutura do projeto
 

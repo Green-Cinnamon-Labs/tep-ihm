@@ -2,7 +2,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "IHM: planta real (gRPC)",
+            "name": "IHM: planta local (gRPC + CSV)",
             "type": "debugpy",
             "request": "launch",
             "module": "src.server",
@@ -10,7 +10,27 @@
             "cwd": "${workspaceFolder}",
             "env": {
                 "PLANT_ADDRESS": "localhost:50051",
-                "PORT": "8080"
+                "PORT": "8080",
+                "K8S_ENABLED": "false",
+                "RECORD_CSV": "true",
+                "RECORD_CSV_PATH": "${workspaceFolder}/data/recording.csv",
+                "ACTIVE_IDV": ""
+            }
+        },
+        {
+            "name": "IHM: planta local + K8s",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "src.server",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PLANT_ADDRESS": "localhost:50051",
+                "PORT": "8080",
+                "K8S_ENABLED": "true",
+                "K8S_SERVER": "https://127.0.0.1:6443",
+                "RECORD_CSV": "true",
+                "RECORD_CSV_PATH": "${workspaceFolder}/data/recording.csv"
             }
         },
         {
@@ -22,7 +42,9 @@
             "cwd": "${workspaceFolder}",
             "env": {
                 "CSV_REPLAY": "${workspaceFolder}/../tep-plant/docs/csvs/simulation_log_13.csv",
-                "PORT": "8080"
+                "PORT": "8080",
+                "K8S_ENABLED": "false",
+                "RECORD_CSV": "false"
             }
         }
     ]

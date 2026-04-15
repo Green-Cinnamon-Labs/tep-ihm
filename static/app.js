@@ -211,6 +211,47 @@ function renderOperator(op) {
     }).join('');
 }
 
+// ── IDV metadata ─────────────────────────────────────────────────────────────
+
+const IDV_META = [
+    { n:  1, type: "Step",   desc: "A/C ratio in feed (stream 4)" },
+    { n:  2, type: "Step",   desc: "B composition in feed (stream 4)" },
+    { n:  3, type: "Step",   desc: "D feed temperature" },
+    { n:  4, type: "Step",   desc: "Reactor CW inlet temp (+5°C)" },
+    { n:  5, type: "Step",   desc: "Condenser CW inlet temp (+5°C)" },
+    { n:  6, type: "Step",   desc: "A feed loss (stream 1 → 0)" },
+    { n:  7, type: "Step",   desc: "C header pressure drop" },
+    { n:  8, type: "Random", desc: "A/B/C feed composition noise" },
+    { n:  9, type: "Random", desc: "D feed temperature noise" },
+    { n: 10, type: "Random", desc: "C feed temperature noise" },
+    { n: 11, type: "Random", desc: "Reactor CW temp noise" },
+    { n: 12, type: "Random", desc: "Condenser CW temp noise" },
+    { n: 13, type: "Random", desc: "Reaction kinetics drift" },
+    { n: 14, type: "Stuck",  desc: "Reactor CW valve stuck (XMV 10)" },
+    { n: 15, type: "Stuck",  desc: "Condenser CW valve stuck (XMV 11)" },
+    { n: 16, type: "Stuck",  desc: "D feed valve stuck (XMV 1)" },
+    { n: 17, type: "Stuck",  desc: "A&C feed valve stuck (XMV 4)" },
+    { n: 18, type: "Stuck",  desc: "A feed valve stuck (XMV 3)" },
+    { n: 19, type: "Stuck",  desc: "Compressor recycle valve stuck (XMV 5)" },
+    { n: 20, type: "Stuck",  desc: "Stripper product valve stuck (XMV 8)" },
+];
+
+const $idvGrid = document.getElementById('idv-grid');
+
+function renderIdv(activeList) {
+    const active = new Set(activeList || []);
+    $idvGrid.innerHTML = IDV_META.map(({ n, type, desc }) => {
+        const on = active.has(n);
+        return `<div class="idv-card ${on ? 'idv-active' : ''}">
+            <span class="idv-num">IDV(${n})</span>
+            <span class="idv-type idv-type-${type.toLowerCase()}">${type}</span>
+            <span class="idv-desc">${desc}</span>
+        </div>`;
+    }).join('');
+}
+
+renderIdv([]);
+
 // ── Update ───────────────────────────────────────────────────────────────────
 
 function update(data) {
@@ -287,6 +328,9 @@ function update(data) {
 
     // Operator panel
     renderOperator(data.operator);
+
+    // IDV panel
+    renderIdv(data.active_idv);
 }
 
 function updateAlarms(alarms) {
@@ -334,3 +378,25 @@ function pushData(chart, values) {
 }
 
 connect();
+
+// ── Recording controls ────────────────────────────────────────────────────────
+
+(async function initRecControls() {
+    // Verifica se o servidor tem gravação ativa (tenta HEAD no endpoint)
+    try {
+        const r = await fetch('/recording.csv', { method: 'HEAD' });
+        if (r.ok || r.status === 404) {
+            // Endpoint existe — RECORD_CSV está ativo
+            document.getElementById('rec-controls').hidden = false;
+        }
+    } catch (_) {}
+})();
+
+document.getElementById('btn-rec-reset').addEventListener('click', async () => {
+    if (!confirm('Limpar gravação e começar novo experimento?')) return;
+    await fetch('/recording/reset', { method: 'POST' });
+    document.getElementById('rec-status').textContent = 'gravando (resetado)';
+    setTimeout(() => {
+        document.getElementById('rec-status').textContent = 'gravando';
+    }, 3000);
+});

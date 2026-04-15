@@ -14,6 +14,11 @@
         <span id="sim-time" class="header-info">t = --</span>
         <span id="plant-status" class="header-info status-tag">--</span>
         <span id="connection-status" class="header-info status-disconnected">desconectado</span>
+        <span id="rec-controls" class="header-rec" hidden>
+            <button id="btn-rec-reset" class="rec-btn" title="Limpa o CSV e marca t=0 do experimento">↺ Reset</button>
+            <a id="btn-rec-download" class="rec-btn" href="/recording.csv" download="recording.csv" title="Baixar CSV gravado">⬇ CSV</a>
+            <span id="rec-status" class="rec-status">gravando</span>
+        </span>
     </header>
 
     <!-- ISD Banner (hidden by default) -->
@@ -87,6 +92,12 @@
             </section>
         </div>
     </main>
+
+        <!-- Row 4: IDV -->
+        <section class="panel">
+            <h2>Disturbances (IDV)</h2>
+            <div id="idv-grid" class="idv-grid"></div>
+        </section>
 
     <script src="/static/app.js"></script>
 </body>

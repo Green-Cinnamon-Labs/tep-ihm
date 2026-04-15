@@ -15,8 +15,8 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 
 
 PLANT_ADDRESS = os.environ.get("PLANT_ADDRESS", "localhost:50051")
@@ -25,19 +25,64 @@ CSV_REPLAY = os.environ.get("CSV_REPLAY", "")
 K8S_ENABLED = os.environ.get("K8S_ENABLED", "true").lower() not in ("0", "false", "no")
 K8S_NAMESPACE = os.environ.get("K8S_NAMESPACE", "default")
 K8S_CR_NAME = os.environ.get("K8S_CR_NAME", "tep-baseline")
-K8S_SERVER = os.environ.get("K8S_SERVER", "")  # ex: https://host.docker.internal:6443
+K8S_SERVER  = os.environ.get("K8S_SERVER", "")   # ex: https://host.docker.internal:6443
+ACTIVE_IDV  = [int(x) for x in os.environ.get("ACTIVE_IDV", "").split(",") if x.strip().isdigit()]
+RECORD_CSV = os.environ.get("RECORD_CSV", "false").lower() not in ("0", "false", "no")
+RECORD_CSV_PATH = os.environ.get("RECORD_CSV_PATH", "/data/recording.csv")
 
 connected_clients: set[WebSocket] = set()
 latest_snapshot: dict | None = None
 latest_operator_state: dict | None = None
+_csv_writer = None  # instância de csv.writer ou None
+_csv_file = None
+_csv_lock = asyncio.Lock()
+
+CSV_HEADER = (
+    ["t_h"]
+    + [f"xmeas_{i+1}" for i in range(41)]
+    + [f"xmv_{i+1}"   for i in range(12)]
+    + ["operator_phase"]
+)
+
+
+def _open_csv(path: str, append: bool = True):
+    """Abre o arquivo CSV e retorna (file, writer). Escreve header se novo."""
+    global _csv_writer, _csv_file
+    if _csv_file:
+        _csv_file.close()
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    mode = "a" if (append and p.exists()) else "w"
+    _csv_file   = open(p, mode, newline="", buffering=1)
+    _csv_writer = csv.writer(_csv_file)
+    if mode == "w":
+        _csv_writer.writerow(CSV_HEADER)
+
+
+def _append_row(snapshot: dict):
+    """Appenda uma linha ao CSV com os dados do snapshot atual."""
+    if _csv_writer is None:
+        return
+    op_phase = (latest_operator_state or {}).get("phase", "")
+    xmeas = snapshot.get("xmeas", [])
+    xmv   = snapshot.get("xmv",   [])
+    row = (
+        [round(snapshot.get("t_h", 0.0), 6)]
+        + [round(v, 6) for v in xmeas]
+        + [round(v, 6) for v in xmv]
+        + [op_phase]
+    )
+    _csv_writer.writerow(row)
 
 
 async def broadcast(snapshot: dict):
     """Envia snapshot pra todos os WebSockets conectados."""
     global latest_snapshot, connected_clients
-    # Enrich snapshot with latest operator state
-    snapshot["operator"] = latest_operator_state
+    snapshot["operator"]   = latest_operator_state
+    snapshot["active_idv"] = ACTIVE_IDV
     latest_snapshot = snapshot
+    if RECORD_CSV:
+        _append_row(snapshot)
     msg = json.dumps(snapshot)
     disconnected = set()
     for ws in connected_clients:
@@ -213,6 +258,9 @@ async def operator_watch_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if RECORD_CSV:
+        _open_csv(RECORD_CSV_PATH, append=True)
+        print(f"[ihm] gravação CSV: {RECORD_CSV_PATH}")
     tasks = []
     if CSV_REPLAY:
         tasks.append(asyncio.create_task(csv_replay_loop()))
@@ -223,6 +271,8 @@ async def lifespan(app: FastAPI):
     yield
     for t in tasks:
         t.cancel()
+    if _csv_file:
+        _csv_file.close()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -234,6 +284,27 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 @app.get("/")
 async def index():
     return FileResponse(str(static_dir / "index.html"))
+
+
+@app.get("/recording.csv")
+async def download_csv():
+    """Download do CSV gravado. Requer RECORD_CSV=true."""
+    p = Path(RECORD_CSV_PATH)
+    if not RECORD_CSV:
+        return Response("RECORD_CSV não está ativo.", status_code=404, media_type="text/plain")
+    if not p.exists():
+        return Response("Nenhum dado gravado ainda.", status_code=404, media_type="text/plain")
+    return FileResponse(str(p), media_type="text/csv", filename="recording.csv")
+
+
+@app.post("/recording/reset")
+async def reset_csv():
+    """Limpa o CSV e começa nova gravação. Requer RECORD_CSV=true."""
+    if not RECORD_CSV:
+        return Response("RECORD_CSV não está ativo.", status_code=404, media_type="text/plain")
+    _open_csv(RECORD_CSV_PATH, append=False)
+    print(f"[ihm] gravação CSV reiniciada: {RECORD_CSV_PATH}")
+    return {"status": "ok", "path": RECORD_CSV_PATH}
 
 
 @app.websocket("/ws")
