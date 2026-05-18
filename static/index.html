@@ -14,10 +14,12 @@
         <span id="sim-time" class="header-info">t = --</span>
         <span id="plant-status" class="header-info status-tag">--</span>
         <span id="connection-status" class="header-info status-disconnected">desconectado</span>
-        <span id="rec-controls" class="header-rec" hidden>
-            <button id="btn-rec-reset" class="rec-btn" title="Limpa o CSV e marca t=0 do experimento">↺ Reset</button>
-            <a id="btn-rec-download" class="rec-btn" href="/recording.csv" download="recording.csv" title="Baixar CSV gravado">⬇ CSV</a>
-            <span id="rec-status" class="rec-status">gravando</span>
+        <span id="rec-controls" class="header-rec">
+            <button id="btn-rec-start" class="rec-btn rec-btn-start" title="Inicia gravação (cria novo CSV)">⏹ Record</button>
+            <button id="btn-rec-stop" class="rec-btn rec-btn-stop" title="Para gravação" disabled>⏸ Stop</button>
+            <a id="btn-rec-download" class="rec-btn rec-btn-download" href="/recording.csv" download="recording.csv" title="Baixa CSV gravado">⬇ Download</a>
+            <span id="rec-status" class="rec-status">parado</span>
+            <span id="rec-timer" class="rec-timer">00:00</span>
         </span>
     </header>
 
@@ -55,11 +57,11 @@
             </div>
         </section>
 
-        <!-- Row 3: XMEAS | XMV | IDV -->
-        <div class="row-split-3">
+        <!-- Row 3: 4 painéis lado a lado -->
+        <div class="row-split-4">
             <section class="panel">
                 <h2>Measurements (XMEAS)</h2>
-                <table id="xmeas-table" class="signal-table">
+                <table id="xmeas-table" class="signal-table signal-table-compact">
                     <thead><tr><th>Tag</th><th>Value</th><th>Unit</th><th>Name</th></tr></thead>
                     <tbody></tbody>
                 </table>
@@ -67,10 +69,15 @@
 
             <section class="panel">
                 <h2>Manipulated (XMV)</h2>
-                <table id="xmv-table" class="signal-table">
+                <table id="xmv-table" class="signal-table signal-table-compact">
                     <thead><tr><th>Tag</th><th>Value</th><th>Unit</th><th>Name</th></tr></thead>
                     <tbody></tbody>
                 </table>
+            </section>
+
+            <section class="panel">
+                <h2>Disturbances (IDV)</h2>
+                <div id="idv-list" class="idv-list"></div>
             </section>
 
             <section class="panel">
@@ -84,20 +91,14 @@
                         <tr><td>Last Action</td><td id="op-last-action">--</td></tr>
                     </table>
                     <h3 class="subpanel-title">Policy Variables</h3>
-                    <table id="operator-vars-table" class="signal-table">
-                        <thead><tr><th>Name</th><th>XMEAS</th><th>Value</th><th>In Range</th><th>Trend</th></tr></thead>
+                    <table id="operator-vars-table" class="signal-table signal-table-compact">
+                        <thead><tr><th>Name</th><th>XMEAS</th><th>Value</th><th>In Range</th></tr></thead>
                         <tbody id="op-vars-tbody"></tbody>
                     </table>
                 </div>
             </section>
         </div>
     </main>
-
-        <!-- Row 4: IDV -->
-        <section class="panel">
-            <h2>Disturbances (IDV)</h2>
-            <div id="idv-grid" class="idv-grid"></div>
-        </section>
 
     <script src="/static/app.js"></script>
 </body>

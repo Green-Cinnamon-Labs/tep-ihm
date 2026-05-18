@@ -36,6 +36,7 @@ latest_operator_state: dict | None = None
 _csv_writer = None  # instância de csv.writer ou None
 _csv_file = None
 _csv_lock = asyncio.Lock()
+_recording_active = False  # controle manual de gravação
 
 CSV_HEADER = (
     ["t_h"]
@@ -47,7 +48,7 @@ CSV_HEADER = (
 
 def _open_csv(path: str, append: bool = True):
     """Abre o arquivo CSV e retorna (file, writer). Escreve header se novo."""
-    global _csv_writer, _csv_file
+    global _csv_writer, _csv_file, _recording_active
     if _csv_file:
         _csv_file.close()
     p = Path(path)
@@ -57,11 +58,22 @@ def _open_csv(path: str, append: bool = True):
     _csv_writer = csv.writer(_csv_file)
     if mode == "w":
         _csv_writer.writerow(CSV_HEADER)
+    _recording_active = True
+
+
+def _close_csv():
+    """Fecha o arquivo CSV sem deletar. Para de gravar."""
+    global _csv_writer, _csv_file, _recording_active
+    if _csv_file:
+        _csv_file.close()
+    _csv_writer = None
+    _csv_file = None
+    _recording_active = False
 
 
 def _append_row(snapshot: dict):
-    """Appenda uma linha ao CSV com os dados do snapshot atual."""
-    if _csv_writer is None:
+    """Appenda uma linha ao CSV com os dados do snapshot atual. Só grava se _recording_active."""
+    if _csv_writer is None or not _recording_active:
         return
     op_phase = (latest_operator_state or {}).get("phase", "")
     xmeas = snapshot.get("xmeas", [])
@@ -259,8 +271,7 @@ async def operator_watch_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if RECORD_CSV:
-        _open_csv(RECORD_CSV_PATH, append=True)
-        print(f"[ihm] gravação CSV: {RECORD_CSV_PATH}")
+        print(f"[ihm] gravação CSV disponível: {RECORD_CSV_PATH} (aguardando /recording/start)")
     tasks = []
     if CSV_REPLAY:
         tasks.append(asyncio.create_task(csv_replay_loop()))
@@ -271,8 +282,7 @@ async def lifespan(app: FastAPI):
     yield
     for t in tasks:
         t.cancel()
-    if _csv_file:
-        _csv_file.close()
+    _close_csv()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -304,7 +314,27 @@ async def reset_csv():
         return Response("RECORD_CSV não está ativo.", status_code=404, media_type="text/plain")
     _open_csv(RECORD_CSV_PATH, append=False)
     print(f"[ihm] gravação CSV reiniciada: {RECORD_CSV_PATH}")
-    return {"status": "ok", "path": RECORD_CSV_PATH}
+    return {"status": "ok", "path": RECORD_CSV_PATH, "recording": True}
+
+
+@app.post("/recording/start")
+async def start_recording():
+    """Inicia gravação (cria ou reseta CSV). Requer RECORD_CSV=true."""
+    if not RECORD_CSV:
+        return Response("RECORD_CSV não está ativo.", status_code=404, media_type="text/plain")
+    _open_csv(RECORD_CSV_PATH, append=False)
+    print(f"[ihm] gravação iniciada: {RECORD_CSV_PATH}")
+    return {"status": "ok", "path": RECORD_CSV_PATH, "recording": True}
+
+
+@app.post("/recording/stop")
+async def stop_recording():
+    """Para a gravação (fecha arquivo sem deletar). Requer RECORD_CSV=true."""
+    if not RECORD_CSV:
+        return Response("RECORD_CSV não está ativo.", status_code=404, media_type="text/plain")
+    _close_csv()
+    print(f"[ihm] gravação parada: {RECORD_CSV_PATH}")
+    return {"status": "ok", "path": RECORD_CSV_PATH, "recording": False}
 
 
 @app.websocket("/ws")

@@ -236,16 +236,14 @@ const IDV_META = [
     { n: 20, type: "Stuck",  desc: "Stripper product valve stuck (XMV 8)" },
 ];
 
-const $idvGrid = document.getElementById('idv-grid');
+const $idvList = document.getElementById('idv-list');
 
 function renderIdv(activeList) {
     const active = new Set(activeList || []);
-    $idvGrid.innerHTML = IDV_META.map(({ n, type, desc }) => {
+    $idvList.innerHTML = IDV_META.map(({ n, type, desc }) => {
         const on = active.has(n);
-        return `<div class="idv-card ${on ? 'idv-active' : ''}">
-            <span class="idv-num">IDV(${n})</span>
-            <span class="idv-type idv-type-${type.toLowerCase()}">${type}</span>
-            <span class="idv-desc">${desc}</span>
+        return `<div class="idv-item ${on ? 'idv-active' : ''}">
+            <strong>IDV(${n})</strong> [${type}] ${desc}
         </div>`;
     }).join('');
 }
@@ -381,22 +379,65 @@ connect();
 
 // ── Recording controls ────────────────────────────────────────────────────────
 
-(async function initRecControls() {
-    // Verifica se o servidor tem gravação ativa (tenta HEAD no endpoint)
-    try {
-        const r = await fetch('/recording.csv', { method: 'HEAD' });
-        if (r.ok || r.status === 404) {
-            // Endpoint existe — RECORD_CSV está ativo
-            document.getElementById('rec-controls').hidden = false;
-        }
-    } catch (_) {}
-})();
+let _recording_state = false;  // estado atual de gravação
+let _recording_start_time = null;  // timestamp quando começou a gravar
+let _recording_timer_id = null;  // ID do setInterval
 
-document.getElementById('btn-rec-reset').addEventListener('click', async () => {
-    if (!confirm('Limpar gravação e começar novo experimento?')) return;
-    await fetch('/recording/reset', { method: 'POST' });
-    document.getElementById('rec-status').textContent = 'gravando (resetado)';
-    setTimeout(() => {
-        document.getElementById('rec-status').textContent = 'gravando';
-    }, 3000);
+function _format_time(seconds) {
+    const mm = Math.floor(seconds / 60);
+    const ss = seconds % 60;
+    return `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+}
+
+function _update_timer() {
+    if (!_recording_start_time) return;
+    const elapsed = Math.floor((Date.now() - _recording_start_time) / 1000);
+    document.getElementById('rec-timer').textContent = _format_time(elapsed);
+}
+
+function _update_recording_ui(recording) {
+    _recording_state = recording;
+    const btnStart = document.getElementById('btn-rec-start');
+    const btnStop = document.getElementById('btn-rec-stop');
+    const btnDownload = document.getElementById('btn-rec-download');
+    const status = document.getElementById('rec-status');
+    const timer = document.getElementById('rec-timer');
+
+    btnStart.disabled = recording;
+    btnStop.disabled = !recording;
+    btnDownload.disabled = false;
+    status.textContent = recording ? '● gravando' : '○ parado';
+    status.className = recording ? 'rec-status rec-status-active' : 'rec-status';
+
+    if (recording) {
+        _recording_start_time = Date.now();
+        if (_recording_timer_id) clearInterval(_recording_timer_id);
+        _recording_timer_id = setInterval(_update_timer, 1000);
+        timer.className = 'rec-timer rec-timer-active';
+    } else {
+        if (_recording_timer_id) clearInterval(_recording_timer_id);
+        _recording_timer_id = null;
+        timer.className = 'rec-timer';
+    }
+}
+
+document.getElementById('btn-rec-start').addEventListener('click', async () => {
+    const resp = await fetch('/recording/start', { method: 'POST' });
+    if (resp.ok) {
+        const data = await resp.json();
+        _update_recording_ui(data.recording);
+        console.log('[rec] gravação iniciada');
+    }
 });
+
+document.getElementById('btn-rec-stop').addEventListener('click', async () => {
+    const resp = await fetch('/recording/stop', { method: 'POST' });
+    if (resp.ok) {
+        const data = await resp.json();
+        _update_recording_ui(data.recording);
+        console.log('[rec] gravação parada');
+    }
+});
+
+// Estado inicial: parado
+_update_recording_ui(false);

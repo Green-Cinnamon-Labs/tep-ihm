@@ -81,9 +81,70 @@ header {
     background: #37474f;
 }
 
+.rec-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.rec-btn-start {
+    background: #1b5e20;
+    color: #81c784;
+    border-color: #4caf50;
+}
+
+.rec-btn-start:not(:disabled):hover {
+    background: #2e7d32;
+}
+
+.rec-btn-stop {
+    background: #b71c1c;
+    color: #ef9a9a;
+    border-color: #d32f2f;
+}
+
+.rec-btn-stop:not(:disabled):hover {
+    background: #c62828;
+}
+
+.rec-btn-download {
+    background: #0d47a1;
+    color: #64b5f6;
+    border-color: #1976d2;
+}
+
+.rec-btn-download:not(:disabled):hover {
+    background: #1565c0;
+}
+
 .rec-status {
     color: #ef9a9a;
     font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 3px;
+    background: #2a2d3a;
+    min-width: 80px;
+    text-align: center;
+}
+
+.rec-status-active {
+    background: #1b5e20;
+    color: #81c784;
+}
+
+.rec-timer {
+    color: #999;
+    font-size: 0.75rem;
+    font-weight: bold;
+    font-family: 'Courier New', monospace;
+    min-width: 45px;
+    text-align: center;
+}
+
+.rec-timer-active {
+    color: #81c784;
+    background: #1b5e20;
+    padding: 2px 8px;
+    border-radius: 3px;
 }
 
 .idv-grid {
@@ -193,6 +254,12 @@ main {
     gap: 8px;
 }
 
+.row-split-4 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 8px;
+}
+
 /* ── Solver ──────────────────────────────────────────────────────────────── */
 
 .kv-table {
@@ -289,6 +356,43 @@ main {
 .signal-table .unit { color: #555; }
 .signal-table .name { color: #78909c; }
 
+.signal-table-compact {
+    font-size: 11px;
+}
+
+.signal-table-compact thead th {
+    padding: 2px 4px;
+}
+
+.signal-table-compact tbody td {
+    padding: 1px 4px;
+}
+
+.idv-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 100%;
+    overflow-y: auto;
+    font-size: 11px;
+}
+
+.idv-item {
+    padding: 3px 6px;
+    border-radius: 2px;
+    background: #1a1a2e;
+    border: 1px solid #263238;
+    opacity: 0.5;
+}
+
+.idv-item.idv-active {
+    opacity: 1;
+    border-color: #ef5350;
+    background: #2d1b1b;
+    color: #ef9a9a;
+    font-weight: bold;
+}
+
 /* ── Charts ──────────────────────────────────────────────────────────────── */
 
 .chart-grid {
@@ -313,8 +417,13 @@ main {
 
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 
+@media (max-width: 1600px) {
+    .row-split-4 { grid-template-columns: 1fr 1fr; }
+}
+
 @media (max-width: 900px) {
     .row-split { grid-template-columns: 1fr; }
     .row-split-3 { grid-template-columns: 1fr; }
+    .row-split-4 { grid-template-columns: 1fr; }
     .chart-grid { grid-template-columns: 1fr; }
 }
