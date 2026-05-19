@@ -26,8 +26,7 @@ K8S_ENABLED = os.environ.get("K8S_ENABLED", "true").lower() not in ("0", "false"
 K8S_NAMESPACE = os.environ.get("K8S_NAMESPACE", "default")
 K8S_CR_NAME = os.environ.get("K8S_CR_NAME", "tep-baseline")
 K8S_SERVER  = os.environ.get("K8S_SERVER", "")   # ex: https://host.docker.internal:6443
-ACTIVE_IDV  = [int(x) for x in os.environ.get("ACTIVE_IDV", "").split(",") if x.strip().isdigit()]
-RECORD_CSV = os.environ.get("RECORD_CSV", "false").lower() not in ("0", "false", "no")
+ACTIVE_IDV = []  # Controlled via /disturbances/update endpoint
 RECORD_CSV_PATH = os.environ.get("RECORD_CSV_PATH", "/data/recording.csv")
 
 connected_clients: set[WebSocket] = set()
@@ -93,8 +92,7 @@ async def broadcast(snapshot: dict):
     snapshot["operator"]   = latest_operator_state
     snapshot["active_idv"] = ACTIVE_IDV
     latest_snapshot = snapshot
-    if RECORD_CSV:
-        _append_row(snapshot)
+    _append_row(snapshot)
     msg = json.dumps(snapshot)
     disconnected = set()
     for ws in connected_clients:
@@ -270,8 +268,7 @@ async def operator_watch_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if RECORD_CSV:
-        print(f"[ihm] gravação CSV disponível: {RECORD_CSV_PATH} (aguardando /recording/start)")
+    print(f"[ihm] gravação CSV disponível: {RECORD_CSV_PATH} (aguardando /recording/start)")
     tasks = []
     if CSV_REPLAY:
         tasks.append(asyncio.create_task(csv_replay_loop()))
@@ -298,10 +295,8 @@ async def index():
 
 @app.get("/recording.csv")
 async def download_csv():
-    """Download do CSV gravado. Requer RECORD_CSV=true."""
+    """Download do CSV gravado."""
     p = Path(RECORD_CSV_PATH)
-    if not RECORD_CSV:
-        return Response("RECORD_CSV não está ativo.", status_code=404, media_type="text/plain")
     if not p.exists():
         return Response("Nenhum dado gravado ainda.", status_code=404, media_type="text/plain")
     return FileResponse(str(p), media_type="text/csv", filename="recording.csv")
@@ -309,9 +304,7 @@ async def download_csv():
 
 @app.post("/recording/reset")
 async def reset_csv():
-    """Limpa o CSV e começa nova gravação. Requer RECORD_CSV=true."""
-    if not RECORD_CSV:
-        return Response("RECORD_CSV não está ativo.", status_code=404, media_type="text/plain")
+    """Limpa o CSV e começa nova gravação."""
     _open_csv(RECORD_CSV_PATH, append=False)
     print(f"[ihm] gravação CSV reiniciada: {RECORD_CSV_PATH}")
     return {"status": "ok", "path": RECORD_CSV_PATH, "recording": True}
@@ -319,9 +312,7 @@ async def reset_csv():
 
 @app.post("/recording/start")
 async def start_recording():
-    """Inicia gravação (cria ou reseta CSV). Requer RECORD_CSV=true."""
-    if not RECORD_CSV:
-        return Response("RECORD_CSV não está ativo.", status_code=404, media_type="text/plain")
+    """Inicia gravação (cria ou reseta CSV)."""
     _open_csv(RECORD_CSV_PATH, append=False)
     print(f"[ihm] gravação iniciada: {RECORD_CSV_PATH}")
     return {"status": "ok", "path": RECORD_CSV_PATH, "recording": True}
@@ -329,9 +320,7 @@ async def start_recording():
 
 @app.post("/recording/stop")
 async def stop_recording():
-    """Para a gravação (fecha arquivo sem deletar). Requer RECORD_CSV=true."""
-    if not RECORD_CSV:
-        return Response("RECORD_CSV não está ativo.", status_code=404, media_type="text/plain")
+    """Para a gravação (fecha arquivo sem deletar)."""
     _close_csv()
     print(f"[ihm] gravação parada: {RECORD_CSV_PATH}")
     return {"status": "ok", "path": RECORD_CSV_PATH, "recording": False}

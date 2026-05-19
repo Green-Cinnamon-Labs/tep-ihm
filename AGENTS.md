@@ -14,7 +14,7 @@ The entire backend lives in a single file: `src/server.py`. It is a FastAPI app 
 | gRPC live  | `PLANT_ADDRESS` (default `localhost:50051`) | `plant_stream_loop()` opens a gRPC `StreamMetrics` stream from tep-plant; reconnects every 3s on failure |
 | CSV replay | `CSV_REPLAY=<path>`                         | `csv_replay_loop()` reads a simulation CSV in a loop, emitting one row per `STREAM_INTERVAL_MS`          |
 
-Both modes call `broadcast(snapshot)`, which fans out JSON to all connected WebSocket clients and optionally appends to a CSV recording (`RECORD_CSV=true`).
+Both modes call `broadcast(snapshot)`, which fans out JSON to all connected WebSocket clients and appends to a CSV recording (always enabled, controlled via UI buttons).
 
 **Kubernetes operator watch** (`operator_watch_loop()`) runs concurrently when `K8S_ENABLED=true`. It uses `asyncio.to_thread` to run the synchronous `kubernetes.watch.Watch` without blocking the event loop. State is stored in the global `latest_operator_state` and merged into each broadcast.
 
@@ -33,9 +33,7 @@ Both modes call `broadcast(snapshot)`, which fans out JSON to all connected WebS
 | `K8S_SERVER`         | ``                    | Override kubeconfig API server URL                      |
 | `K8S_NAMESPACE`      | `default`             | Namespace for the PLCMachine CR                         |
 | `K8S_CR_NAME`        | `tep-baseline`        | Name of the PLCMachine CR to watch                      |
-| `ACTIVE_IDV`         | ``                    | Comma-separated IDV numbers to show as active in the UI |
-| `RECORD_CSV`         | `false`               | Enable CSV recording of all broadcasts                  |
-| `RECORD_CSV_PATH`    | `/data/recording.csv` | Output path for recording                               |
+| `RECORD_CSV_PATH`    | `/data/recording.csv` | Output path for CSV recording                           |
 | `PORT`               | `8080`                | HTTP port                                               |
 
 ## Agent Rules

@@ -2,7 +2,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "IHM: planta local (gRPC + CSV)",
+            "name": "IHM: planta local (plant gRPC)",
             "type": "debugpy",
             "request": "launch",
             "module": "src.server",
@@ -11,14 +11,11 @@
             "env": {
                 "PLANT_ADDRESS": "localhost:50051",
                 "PORT": "8080",
-                "K8S_ENABLED": "false",
-                "RECORD_CSV": "true",
-                "RECORD_CSV_PATH": "${workspaceFolder}/data/recording.csv",
-                "ACTIVE_IDV": ""
+                "K8S_ENABLED": "false"
             }
         },
         {
-            "name": "IHM: planta local + K8s",
+            "name": "IHM: planta local (plant gRPC + k8s)",
             "type": "debugpy",
             "request": "launch",
             "module": "src.server",
@@ -28,26 +25,7 @@
                 "PLANT_ADDRESS": "localhost:50051",
                 "PORT": "8080",
                 "K8S_ENABLED": "true",
-                "K8S_SERVER": "https://127.0.0.1:6443",
-                "RECORD_CSV": "true",
-                "RECORD_CSV_PATH": "${workspaceFolder}/data/recording.csv",
-                "ACTIVE_IDV": ""
-            }
-        },
-        {
-            "name": "IHM: planta local + IDV(4)",
-            "type": "debugpy",
-            "request": "launch",
-            "module": "src.server",
-            "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}",
-            "env": {
-                "PLANT_ADDRESS": "localhost:50051",
-                "PORT": "8080",
-                "K8S_ENABLED": "false",
-                "RECORD_CSV": "true",
-                "RECORD_CSV_PATH": "${workspaceFolder}/data/recording.csv",
-                "ACTIVE_IDV": "4"
+                "K8S_SERVER": "https://127.0.0.1:6443"
             }
         },
         {
@@ -61,7 +39,6 @@
                 "CSV_REPLAY": "${workspaceFolder}/../tep-plant/docs/csvs/simulation_log_13.csv",
                 "PORT": "8080",
                 "K8S_ENABLED": "false",
-                "RECORD_CSV": "false"
             }
         }
     ]
