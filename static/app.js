@@ -243,9 +243,48 @@ function renderIdv(activeList) {
     $idvList.innerHTML = IDV_META.map(({ n, type, desc }) => {
         const on = active.has(n);
         return `<div class="idv-item ${on ? 'idv-active' : ''}">
-            <strong>IDV(${n})</strong> [${type}] ${desc}
+            <div class="idv-content">
+                <strong>IDV(${n})</strong> [${type}] ${desc}
+            </div>
+            <button class="idv-toggle ${on ? 'idv-toggle-on' : 'idv-toggle-off'}"
+                    data-idv="${n}"
+                    title="${on ? 'Desativar' : 'Ativar'} IDV(${n})">
+                ${on ? '⏹' : '▶'}
+            </button>
         </div>`;
     }).join('');
+
+    // Event listeners for toggle buttons
+    document.querySelectorAll('.idv-toggle').forEach(btn => {
+        btn.addEventListener('click', toggleIdv);
+    });
+}
+
+async function toggleIdv(event) {
+    const btn = event.target;
+    const idvNum = parseInt(btn.dataset.idv);
+    const isActive = btn.classList.contains('idv-toggle-on');
+
+    // Get current active list and toggle
+    const currentActive = new Set(_recording_state ? activeIdvList : []);
+    if (isActive) {
+        currentActive.delete(idvNum);
+    } else {
+        currentActive.add(idvNum);
+    }
+
+    // Send to server
+    const resp = await fetch('/disturbances/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active_idv: Array.from(currentActive) })
+    });
+
+    if (resp.ok) {
+        console.log(`[idv] IDV(${idvNum}) toggled to ${!isActive}`);
+    } else {
+        console.error(`[idv] Failed to toggle IDV(${idvNum})`);
+    }
 }
 
 renderIdv([]);
@@ -441,3 +480,24 @@ document.getElementById('btn-rec-stop').addEventListener('click', async () => {
 
 // Estado inicial: parado
 _update_recording_ui(false);
+
+// ── Simulation Pause Button ──────────────────────────────────────────────────────
+
+let _sim_paused = false;
+
+document.getElementById('btn-sim-pause').addEventListener('click', async () => {
+    _sim_paused = !_sim_paused;
+    const btn = document.getElementById('btn-sim-pause');
+
+    if (_sim_paused) {
+        btn.classList.remove('sim-running');
+        btn.classList.add('sim-paused');
+        btn.textContent = '▶ Resume';
+        console.log('[sim] paused');
+    } else {
+        btn.classList.remove('sim-paused');
+        btn.classList.add('sim-running');
+        btn.textContent = '⏸ Pause';
+        console.log('[sim] resumed');
+    }
+});

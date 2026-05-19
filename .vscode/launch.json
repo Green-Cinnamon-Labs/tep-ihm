@@ -30,7 +30,24 @@
                 "K8S_ENABLED": "true",
                 "K8S_SERVER": "https://127.0.0.1:6443",
                 "RECORD_CSV": "true",
-                "RECORD_CSV_PATH": "${workspaceFolder}/data/recording.csv"
+                "RECORD_CSV_PATH": "${workspaceFolder}/data/recording.csv",
+                "ACTIVE_IDV": ""
+            }
+        },
+        {
+            "name": "IHM: planta local + IDV(4)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "src.server",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PLANT_ADDRESS": "localhost:50051",
+                "PORT": "8080",
+                "K8S_ENABLED": "false",
+                "RECORD_CSV": "true",
+                "RECORD_CSV_PATH": "${workspaceFolder}/data/recording.csv",
+                "ACTIVE_IDV": "4"
             }
         },
         {

@@ -337,6 +337,20 @@ async def stop_recording():
     return {"status": "ok", "path": RECORD_CSV_PATH, "recording": False}
 
 
+@app.post("/disturbances/update")
+async def update_disturbances(payload: dict):
+    """Atualiza a lista de distúrbios ativos. Recebe { 'active_idv': [list] }."""
+    global ACTIVE_IDV
+    try:
+        new_active = payload.get("active_idv", [])
+        ACTIVE_IDV = sorted([int(x) for x in new_active if isinstance(x, int)])
+        print(f"[ihm] disturbios ativos atualizados: {ACTIVE_IDV}")
+        return {"status": "ok", "active_idv": ACTIVE_IDV}
+    except Exception as e:
+        print(f"[ihm] erro ao atualizar distúrbios: {e}")
+        return Response(f"Erro: {e}", status_code=400, media_type="text/plain")
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
