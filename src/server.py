@@ -337,14 +337,74 @@ async def stop_recording():
     return {"status": "ok", "path": RECORD_CSV_PATH, "recording": False}
 
 
+@app.post("/simulation/control")
+async def control_simulation(payload: dict):
+    """Controla simulação (pause, resume). Recebe { 'action': 'pause'|'resume' }."""
+    try:
+        import grpc
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "gen"))
+        from tep.v1 import plant_pb2, plant_pb2_grpc
+
+        action_str = payload.get("action", "").lower()
+        action_map = {
+            "pause": plant_pb2.ControlSimulationRequest.Action.PAUSE,
+            "resume": plant_pb2.ControlSimulationRequest.Action.RESUME,
+            "reset": plant_pb2.ControlSimulationRequest.Action.RESET,
+        }
+
+        if action_str not in action_map:
+            return Response(f"Ação inválida: {action_str}", status_code=400, media_type="text/plain")
+
+        # Envia comando para planta via gRPC (não-blocking)
+        if not CSV_REPLAY:
+            async def send_control_command():
+                try:
+                    channel = grpc.aio.insecure_channel(PLANT_ADDRESS)
+                    stub = plant_pb2_grpc.PlantServiceStub(channel)
+                    request = plant_pb2.ControlSimulationRequest(action=action_map[action_str])
+                    response = await stub.ControlSimulation(request)
+                    await channel.close()
+                    print(f"[ihm] simulação {action_str}: {response.message}")
+                except Exception as plant_err:
+                    print(f"[ihm] aviso: não pude controlar simulação: {plant_err}")
+
+            asyncio.create_task(send_control_command())
+
+        return {"status": "ok", "action": action_str}
+    except Exception as e:
+        print(f"[ihm] erro ao controlar simulação: {e}")
+        return Response(f"Erro: {e}", status_code=400, media_type="text/plain")
+
+
 @app.post("/disturbances/update")
 async def update_disturbances(payload: dict):
-    """Atualiza a lista de distúrbios ativos. Recebe { 'active_idv': [list] }."""
+    """Atualiza a lista de distúrbios ativos em tempo real. Recebe { 'active_idv': [list] }."""
     global ACTIVE_IDV
     try:
+        import grpc
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "gen"))
+        from tep.v1 import plant_pb2, plant_pb2_grpc
+
         new_active = payload.get("active_idv", [])
         ACTIVE_IDV = sorted([int(x) for x in new_active if isinstance(x, int)])
-        print(f"[ihm] disturbios ativos atualizados: {ACTIVE_IDV}")
+
+        # Atualiza planta via gRPC se conectada (não-blocking)
+        if not CSV_REPLAY:
+            async def update_plant_disturbances():
+                try:
+                    channel = grpc.aio.insecure_channel(PLANT_ADDRESS)
+                    stub = plant_pb2_grpc.PlantServiceStub(channel)
+                    request = plant_pb2.UpdateDisturbancesRequest(active_idv=[int(x) for x in ACTIVE_IDV])
+                    response = await stub.UpdateDisturbances(request)
+                    await channel.close()
+                    print(f"[ihm] disturbios atualizados na planta: {ACTIVE_IDV}")
+                except Exception as plant_err:
+                    print(f"[ihm] aviso: não pude atualizar planta: {plant_err}")
+
+            asyncio.create_task(update_plant_disturbances())
+        else:
+            print(f"[ihm] modo CSV replay: distúrbios apenas locais: {ACTIVE_IDV}")
+
         return {"status": "ok", "active_idv": ACTIVE_IDV}
     except Exception as e:
         print(f"[ihm] erro ao atualizar distúrbios: {e}")

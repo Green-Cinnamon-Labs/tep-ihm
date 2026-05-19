@@ -488,16 +488,29 @@ let _sim_paused = false;
 document.getElementById('btn-sim-pause').addEventListener('click', async () => {
     _sim_paused = !_sim_paused;
     const btn = document.getElementById('btn-sim-pause');
+    const action = _sim_paused ? 'pause' : 'resume';
 
-    if (_sim_paused) {
-        btn.classList.remove('sim-running');
-        btn.classList.add('sim-paused');
-        btn.textContent = '▶ Resume';
-        console.log('[sim] paused');
+    // Send to server
+    const resp = await fetch('/simulation/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
+    });
+
+    if (resp.ok) {
+        if (_sim_paused) {
+            btn.classList.remove('sim-running');
+            btn.classList.add('sim-paused');
+            btn.textContent = '▶ Resume';
+            console.log('[sim] pause sent to plant');
+        } else {
+            btn.classList.remove('sim-paused');
+            btn.classList.add('sim-running');
+            btn.textContent = '⏸ Pause';
+            console.log('[sim] resume sent to plant');
+        }
     } else {
-        btn.classList.remove('sim-paused');
-        btn.classList.add('sim-running');
-        btn.textContent = '⏸ Pause';
-        console.log('[sim] resumed');
+        console.error(`[sim] failed to ${action} simulation`);
+        _sim_paused = !_sim_paused;
     }
 });
