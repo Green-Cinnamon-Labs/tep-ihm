@@ -144,6 +144,10 @@ const $xmeasTbody = document.querySelector('#xmeas-table tbody');
 const $xmvTbody = document.querySelector('#xmv-table tbody');
 const $isdBanner = document.getElementById('isd-banner');
 
+// ── State ────────────────────────────────────────────────────────────────────
+
+let _currentActiveIdv = [];  // Track current active disturbances from WebSocket
+
 // ── WebSocket ────────────────────────────────────────────────────────────────
 
 function connect() {
@@ -266,7 +270,7 @@ async function toggleIdv(event) {
     const isActive = btn.classList.contains('idv-toggle-on');
 
     // Get current active list and toggle
-    const currentActive = new Set(_recording_state ? activeIdvList : []);
+    const currentActive = new Set(_currentActiveIdv || []);
     if (isActive) {
         currentActive.delete(idvNum);
     } else {
@@ -366,8 +370,9 @@ function update(data) {
     // Operator panel
     renderOperator(data.operator);
 
-    // IDV panel
-    renderIdv(data.active_idv);
+    // IDV panel — track current active list and render
+    _currentActiveIdv = data.active_idv || [];
+    renderIdv(_currentActiveIdv);
 }
 
 function updateAlarms(alarms) {
