@@ -71,18 +71,11 @@ function colorizeVessel(vesselId, tempC) {
     const vessel = document.getElementById(vesselId);
     if (!vessel) return;
 
-    const rect = vessel.querySelector('rect[class*="vessel"]');
-    if (!rect) return;
-
-    rect.classList.remove('vessel-cold', 'vessel-warm', 'vessel-hot');
-
-    if (tempC < 100) {
-        rect.classList.add('vessel-cold');
-    } else if (tempC < 150) {
-        rect.classList.add('vessel-warm');
-    } else {
-        rect.classList.add('vessel-hot');
-    }
+    const color = tempC < 100 ? '#4fc3f7' : tempC < 150 ? '#ffb74d' : '#ef5350';
+    vessel.querySelectorAll('path, ellipse, rect').forEach(el => {
+        el.style.fill = color;
+        el.style.fillOpacity = '0.4';
+    });
 }
 
 // ── Stream flow visualization (stroke-width) ────────────────────────────────
@@ -162,33 +155,44 @@ function updateDiagram(xmeas, xmv) {
     colorizeVessel('unit-separator', xmeas[10]);    // XMEAS(11)
     colorizeVessel('unit-stripper', xmeas[17]);     // XMEAS(18)
 
-    // Largura de streams (fluxos)
-    updateStreamWidth('stream-01-a-feed', xmeas[0]);         // XMEAS(1)
-    updateStreamWidth('stream-02-d-feed', xmeas[1]);         // XMEAS(2)
-    updateStreamWidth('stream-03-e-feed', xmeas[2]);         // XMEAS(3)
-    updateStreamWidth('stream-04-ac-feed', xmeas[3]);        // XMEAS(4)
-    updateStreamWidth('stream-06-reactor-feed', xmeas[5]);   // XMEAS(6)
+    // Largura de streams — IDs do Draw.io exportado (segmentos downstream)
+    updateStreamWidth('stream-01-a-feed-down', xmeas[0]);    // XMEAS(1)
+    updateStreamWidth('stream-02-a-feed-down', xmeas[1]);    // XMEAS(2) — TODO: renomear para stream-02-d-feed-down no Draw.io
+    updateStreamWidth('stream-03-e-feed-down', xmeas[2]);    // XMEAS(3)
+    updateStreamWidth('stream-04-c-feed-down', xmeas[3]);    // XMEAS(4)
+    updateStreamWidth('stream-06-mixer-reactor', xmeas[5]);  // XMEAS(6)
     updateStreamWidth('stream-09-purge', xmeas[9]);          // XMEAS(10)
-    updateStreamWidth('stream-08-recycle', xmeas[4]);        // XMEAS(5)
+    updateStreamWidth('stream-08-sep-compressor', xmeas[4]); // XMEAS(5)
 
-    // Valores de sensores
-    updateSensorValue('sensor-xmeas-07', xmeas[6], 'kPa');   // XMEAS(7)
-    updateSensorValue('sensor-xmeas-08', xmeas[7], '%');     // XMEAS(8)
-    updateSensorValue('sensor-xmeas-09', xmeas[8], '°C');    // XMEAS(9)
-    updateSensorValue('sensor-xmeas-12', xmeas[11], '%');    // XMEAS(12)
-    updateSensorValue('sensor-xmeas-13', xmeas[12], 'kPa');  // XMEAS(13)
-    updateSensorValue('sensor-xmeas-15', xmeas[14], '%');    // XMEAS(15)
-    updateSensorValue('sensor-xmeas-16', xmeas[15], 'kPa');  // XMEAS(16)
-    updateSensorValue('sensor-xmeas-18', xmeas[17], '°C');   // XMEAS(18)
+    // Sensores: ainda não adicionados ao diagrama Draw.io
+    // updateSensorValue('sensor-xmeas-07', xmeas[6], 'kPa');
+    // updateSensorValue('sensor-xmeas-08', xmeas[7], '%');
+    // updateSensorValue('sensor-xmeas-09', xmeas[8], '°C');
+    // updateSensorValue('sensor-xmeas-12', xmeas[11], '%');
+    // updateSensorValue('sensor-xmeas-13', xmeas[12], 'kPa');
+    // updateSensorValue('sensor-xmeas-15', xmeas[14], '%');
+    // updateSensorValue('sensor-xmeas-16', xmeas[15], 'kPa');
+    // updateSensorValue('sensor-xmeas-18', xmeas[17], '°C');
 
-    // Composições de analisadores
-    updateAnalyzerDisplay('analyzer-reactor-feed', xmeas);   // XMEAS(23-28)
-    updateAnalyzerDisplay('analyzer-purge', xmeas);          // XMEAS(29-36)
-    updateAnalyzerDisplay('analyzer-product', xmeas);        // XMEAS(37-41)
+    // Analisadores: ainda não adicionados ao diagrama Draw.io
+    // updateAnalyzerDisplay('analyzer-reactor-feed', xmeas);
+    // updateAnalyzerDisplay('analyzer-purge', xmeas);
+    // updateAnalyzerDisplay('analyzer-product', xmeas);
 }
 
 // ── Initialization ───────────────────────────────────────────────────────────
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    const container = document.getElementById('diagram-container');
+    if (container) {
+        try {
+            const res = await fetch('/static/plant-diagram.svg');
+            const svgText = await res.text();
+            container.innerHTML = svgText;
+            console.log('[diagram] SVG carregado de plant-diagram.svg');
+        } catch (e) {
+            console.error('[diagram] Falha ao carregar SVG:', e);
+        }
+    }
     initDiagramInteraction();
 });
