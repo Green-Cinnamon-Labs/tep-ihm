@@ -150,6 +150,8 @@ let _currentActiveIdv = [];  // Track current active disturbances from WebSocket
 
 // ── WebSocket ────────────────────────────────────────────────────────────────
 
+const $btnReconnect = document.getElementById('btn-reconnect');
+
 function connect() {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${proto}//${location.host}/ws`);
@@ -158,6 +160,15 @@ function connect() {
     ws.onclose = () => { $status.textContent = 'desconectado'; $status.className = 'header-info status-disconnected'; setTimeout(connect, 2000); };
     ws.onerror = () => ws.close();
     ws.onmessage = (e) => update(JSON.parse(e.data));
+}
+
+async function reconnectPlant() {
+    if ($btnReconnect) { $btnReconnect.disabled = true; $btnReconnect.textContent = '⟳ Conectando...'; }
+    try {
+        await fetch('/api/reconnect', { method: 'POST' });
+    } finally {
+        if ($btnReconnect) { $btnReconnect.disabled = false; $btnReconnect.textContent = '⟳ Tentar conectar'; }
+    }
 }
 
 // ── Update ───────────────────────────────────────────────────────────────────
@@ -296,6 +307,14 @@ renderIdv([]);
 // ── Update ───────────────────────────────────────────────────────────────────
 
 function update(data) {
+    if (data.plant_connection === 'failed') {
+        if ($btnReconnect) $btnReconnect.style.display = 'inline-block';
+        $status.textContent = 'planta offline';
+        $status.className = 'header-info status-disconnected';
+        return;
+    }
+    if ($btnReconnect) $btnReconnect.style.display = 'none';
+
     const { t_h, xmeas, xmv, alarms, deriv_norm, isd_active } = data;
 
     // Header

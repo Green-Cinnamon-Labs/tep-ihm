@@ -36,6 +36,9 @@ _csv_writer = None  # instância de csv.writer ou None
 _csv_file = None
 _csv_lock = asyncio.Lock()
 _recording_active = False  # controle manual de gravação
+_plant_task: asyncio.Task | None = None
+_MAX_PLANT_RETRIES = 3
+_plant_connection_failed = False
 
 CSV_HEADER = (
     ["t_h"]
@@ -155,24 +158,44 @@ async def csv_replay_loop():
 
 # ── gRPC Stream ───────────────────────────────────────────────────────────────
 
+async def broadcast_status(msg: dict):
+    """Envia mensagem de status (sem gravar em CSV) para todos os WebSockets."""
+    text = json.dumps(msg)
+    disconnected = set()
+    for ws in connected_clients:
+        try:
+            await ws.send_text(text)
+        except Exception:
+            disconnected.add(ws)
+    connected_clients.difference_update(disconnected)
+
+
 async def plant_stream_loop():
-    """Loop que conecta na planta via gRPC e faz broadcast pros WebSockets."""
+    """Tenta conectar na planta via gRPC até _MAX_PLANT_RETRIES vezes.
+    Após esgotar as tentativas, para e notifica os clientes via WebSocket."""
+    global _plant_connection_failed
     import grpc
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "gen"))
     from tep.v1 import plant_pb2, plant_pb2_grpc
 
-    while True:
+    retries = 0
+
+    while retries < _MAX_PLANT_RETRIES:
+        channel = None
         try:
             channel = grpc.aio.insecure_channel(PLANT_ADDRESS)
             stub = plant_pb2_grpc.PlantServiceStub(channel)
-
             request = plant_pb2.StreamMetricsRequest(interval_ms=STREAM_INTERVAL_MS)
             stream = stub.StreamMetrics(request)
 
-            print(f"[ihm] conectado na planta em {PLANT_ADDRESS}")
-
+            _connected = False
             async for metrics in stream:
+                if not _connected:
+                    print(f"[ihm] conectado na planta em {PLANT_ADDRESS}")
+                    retries = 0
+                    _plant_connection_failed = False
+                    _connected = True
                 snapshot = {
                     "t_h": metrics.t_h,
                     "xmeas": list(metrics.xmeas),
@@ -187,16 +210,30 @@ async def plant_stream_loop():
                 await broadcast(snapshot)
 
         except grpc.aio.AioRpcError as e:
-            print(f"[ihm] gRPC erro: {e.code()} — reconectando em 3s...")
-        except Exception as e:
-            print(f"[ihm] erro inesperado: {e} — reconectando em 3s...")
-        finally:
-            try:
-                await channel.close()
-            except Exception:
-                pass
+            retries += 1
+            if retries < _MAX_PLANT_RETRIES:
+                print(f"[ihm] gRPC erro: {e.code()} — tentativa {retries}/{_MAX_PLANT_RETRIES}, reconectando em 3s...")
+                await asyncio.sleep(3)
+            else:
+                print(f"[ihm] gRPC erro: {e.code()} — {_MAX_PLANT_RETRIES} tentativas esgotadas. Aguardando reconexão manual.")
 
-        await asyncio.sleep(3)
+        except Exception as e:
+            retries += 1
+            if retries < _MAX_PLANT_RETRIES:
+                print(f"[ihm] erro inesperado: {e} — tentativa {retries}/{_MAX_PLANT_RETRIES}, reconectando em 3s...")
+                await asyncio.sleep(3)
+            else:
+                print(f"[ihm] erro inesperado: {e} — {_MAX_PLANT_RETRIES} tentativas esgotadas. Aguardando reconexão manual.")
+
+        finally:
+            if channel:
+                try:
+                    await channel.close()
+                except Exception:
+                    pass
+
+    _plant_connection_failed = True
+    await broadcast_status({"plant_connection": "failed"})
 
 
 # ── Kubernetes operator watch ─────────────────────────────────────────────────
@@ -286,6 +323,17 @@ app = FastAPI(lifespan=lifespan)
 
 static_dir = Path(__file__).resolve().parent.parent / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+
+@app.post("/api/reconnect")
+async def reconnect_plant():
+    global _plant_task, _plant_connection_failed
+    if _plant_task and not _plant_task.done():
+        return {"status": "already_running"}
+    _plant_connection_failed = False
+    _plant_task = asyncio.create_task(plant_stream_loop())
+    print("[ihm] reconexão manual iniciada")
+    return {"status": "reconnecting"}
 
 
 @app.get("/")
@@ -406,7 +454,9 @@ async def websocket_endpoint(ws: WebSocket):
     connected_clients.add(ws)
     print(f"[ihm] cliente WebSocket conectado ({len(connected_clients)} total)")
 
-    if latest_snapshot:
+    if _plant_connection_failed:
+        await ws.send_text(json.dumps({"plant_connection": "failed"}))
+    elif latest_snapshot:
         await ws.send_text(json.dumps(latest_snapshot))
 
     try:
