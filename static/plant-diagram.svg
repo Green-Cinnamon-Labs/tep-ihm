@@ -73,7 +73,7 @@
   <!-- BACKGROUND & TITLE -->
   <g id="background">
     <rect class="background" width="1600" height="950" />
-    <text class="title" x="30" y="35">Tennessee Eastman Process — P&ID (Piping &amp; Instrumentation Diagram)</text>
+    <text class="title" x="30" y="35">Tennessee Eastman Process — P&amp;ID (Piping &amp; Instrumentation Diagram)</text>
   </g>
 
   <!-- ============================================================ -->
