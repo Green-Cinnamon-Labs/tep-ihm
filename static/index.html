@@ -46,19 +46,144 @@
             </section>
         </div>
 
-        <!-- Row 2: Charts -->
-        <section class="panel">
-            <div class="trends-header">
-                <h2>Trends</h2>
-                <button id="btn-sim-pause" class="sim-control-btn sim-running" title="Pause simulation">⏸ Pause</button>
-            </div>
-            <div class="chart-grid">
-                <div class="chart-container"><canvas id="chart-pressure"></canvas></div>
-                <div class="chart-container"><canvas id="chart-temperature"></canvas></div>
-                <div class="chart-container"><canvas id="chart-levels"></canvas></div>
-                <div class="chart-container"><canvas id="chart-flows"></canvas></div>
-            </div>
-        </section>
+        <!-- Row 2: Diagram (left) + Charts (right) -->
+        <div class="row-diagram-charts">
+            <!-- Left: Process Diagram (P&ID) -->
+            <section class="panel panel-diagram">
+                <h2>Process Diagram (P&ID)</h2>
+                <div id="diagram-container" style="overflow-x: auto; background: #fafafa; border-radius: 4px; padding: 8px; flex: 1;">
+                <svg id="tep-diagram" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 950" style="width: 100%; max-width: 1200px; height: auto; border: 1px solid #ddd; border-radius: 4px;">
+                    <defs>
+                        <style>
+                            .unit { stroke: #333; stroke-width: 2; }
+                            .vessel { fill: #f0f0f0; stroke: #333; stroke-width: 2; }
+                            .heat-exchanger { fill: #fff3cd; stroke: #333; stroke-width: 2; }
+                            .machine { fill: #e8f4f8; stroke: #333; stroke-width: 2; }
+                            .vessel-cold { fill: #d4e6f1; }
+                            .vessel-warm { fill: #f9e79f; }
+                            .vessel-hot { fill: #f5b7b1; }
+                            .stream { fill: none; stroke: #555; stroke-width: 2; stroke-linecap: square; stroke-linejoin: miter; }
+                            .stream.gas { stroke-dasharray: 5,4; }
+                            .stream.liquid { stroke-dasharray: none; }
+                            .stream.vapor { stroke-dasharray: 3,3; }
+                            .stream.utility { stroke: #00bfa4; stroke-width: 1.5; }
+                            .stream.feed { stroke: #8b6f47; }
+                            .stream.product { stroke: #1e3a8a; }
+                            .stream.recycle { stroke: #4a90e2; }
+                            .port { fill: #555; stroke: none; }
+                            .valve-symbol { fill: #999; stroke: #333; stroke-width: 1.5; }
+                            .valve-open { fill: #66bb6a; }
+                            .valve-stuck { fill: #ef5350; }
+                            .agitator-symbol { fill: none; stroke: #555; stroke-width: 1.5; stroke-dasharray: 3,2; }
+                            .sensor { stroke: #333; stroke-width: 1; }
+                            .sensor-circle { fill: #666; }
+                            .sensor-label { font-family: Consolas, monospace; font-size: 8px; font-weight: bold; fill: #fff; text-anchor: middle; }
+                            .sensor-value { font-family: Consolas, monospace; font-size: 7px; fill: #333; }
+                            .analyzer-box { fill: #fffacd; stroke: #333; stroke-width: 1.5; }
+                            .analyzer-label { font-family: Consolas, monospace; font-size: 8px; fill: #333; font-weight: bold; text-anchor: middle; }
+                            .label-unit { font-family: Consolas, monospace; font-size: 11px; font-weight: bold; fill: #222; text-anchor: middle; }
+                            .label-stream { font-family: Consolas, monospace; font-size: 8px; fill: #555; }
+                            .label-xmv { font-family: Consolas, monospace; font-size: 7px; fill: #fff; font-weight: bold; text-anchor: middle; }
+                            .label-port { font-family: Consolas, monospace; font-size: 7px; fill: #666; }
+                            .alarm-ok { }
+                            .alarm-warning { filter: drop-shadow(0 0 4px #ffa726); }
+                            .alarm-active { filter: drop-shadow(0 0 6px #ef5350); }
+                            .background { fill: #fafafa; }
+                            .title { font-family: Consolas, monospace; font-size: 16px; font-weight: bold; fill: #333; }
+                        </style>
+                        <marker id="arrow-gas" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#8b6f47" /></marker>
+                        <marker id="arrow-liquid" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#1e3a8a" /></marker>
+                        <marker id="arrow-vapor" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#ef5350" /></marker>
+                    </defs>
+                    <g id="background"><rect class="background" width="1600" height="950" /><text class="title" x="30" y="35">Tennessee Eastman Process — P&amp;ID</text></g>
+                    <g id="units">
+                        <g id="unit-reactor" class="unit vessel alarm-ok" data-unit="reactor"><rect x="150" y="250" width="120" height="180" rx="8" class="vessel-cold" /><path d="M 160 250 Q 210 220 260 250" fill="none" stroke="#333" stroke-width="2" /><path d="M 160 430 Q 210 460 260 430" fill="none" stroke="#333" stroke-width="2" /><circle cx="210" cy="340" r="25" class="agitator-symbol" /><text class="label-unit" x="210" y="345">REACTOR</text><circle class="port" cx="210" cy="250" r="3" /><circle class="port" cx="150" cy="340" r="3" /><circle class="port" cx="270" cy="340" r="3" /><circle class="port" cx="210" cy="430" r="3" /></g>
+                        <g id="unit-condenser" class="unit heat-exchanger" data-unit="condenser"><rect x="380" y="270" width="90" height="140" rx="5" class="heat-exchanger" /><line x1="385" y1="285" x2="465" y2="285" stroke="#ff9999" stroke-width="1.5" /><line x1="385" y1="305" x2="465" y2="305" stroke="#ff9999" stroke-width="1.5" /><line x1="385" y1="325" x2="465" y2="325" stroke="#ff9999" stroke-width="1.5" /><line x1="385" y1="345" x2="465" y2="345" stroke="#ff9999" stroke-width="1.5" /><line x1="375" y1="295" x2="375" y2="385" stroke="#1abc9c" stroke-width="1.5" /><text class="label-unit" x="425" y="345">COND</text><circle class="port" cx="380" cy="320" r="3" /><circle class="port" cx="470" cy="340" r="3" /><circle class="port" cx="375" cy="280" r="3" /><circle class="port" cx="375" cy="395" r="3" /></g>
+                        <g id="unit-separator" class="unit vessel alarm-ok" data-unit="separator"><ellipse cx="570" cy="270" rx="50" ry="20" fill="none" stroke="#333" stroke-width="2" /><rect x="520" y="270" width="100" height="140" class="vessel-cold" /><ellipse cx="570" cy="410" rx="50" ry="20" fill="none" stroke="#333" stroke-width="2" /><line x1="545" y1="290" x2="595" y2="290" stroke="#ccc" stroke-width="1" stroke-dasharray="2,2" /><text class="label-unit" x="570" y="345">SEP</text><circle class="port" cx="520" cy="300" r="3" /><circle class="port" cx="620" cy="280" r="3" /><circle class="port" cx="620" cy="400" r="3" /></g>
+                        <g id="unit-stripper" class="unit vessel alarm-ok" data-unit="stripper"><rect x="920" y="200" width="110" height="250" rx="8" class="vessel-cold" /><line x1="920" y1="240" x2="1030" y2="240" stroke="#ccc" stroke-width="0.5" stroke-dasharray="2,2" /><line x1="920" y1="280" x2="1030" y2="280" stroke="#ccc" stroke-width="0.5" stroke-dasharray="2,2" /><line x1="920" y1="320" x2="1030" y2="320" stroke="#ccc" stroke-width="0.5" stroke-dasharray="2,2" /><line x1="920" y1="360" x2="1030" y2="360" stroke="#ccc" stroke-width="0.5" stroke-dasharray="2,2" /><text class="label-unit" x="975" y="330">STRIPPER</text><circle class="port" cx="920" cy="290" r="3" /><circle class="port" cx="920" cy="210" r="3" /><circle class="port" cx="1030" cy="210" r="3" /><circle class="port" cx="1030" cy="450" r="3" /></g>
+                        <g id="unit-compressor" class="unit machine" data-unit="compressor"><rect x="720" y="550" width="100" height="80" rx="8" class="machine" /><circle cx="770" cy="590" r="20" fill="none" stroke="#333" stroke-width="1.5" /><path d="M 760 590 L 780 590" stroke="#333" stroke-width="1.5" /><text class="label-unit" x="770" y="598">COMP</text><circle class="port" cx="770" cy="550" r="3" /><circle class="port" cx="820" cy="590" r="3" /></g>
+                    </g>
+                    <g id="utilities">
+                        <g id="stream-12-reactor-cw" class="stream utility" data-stream="12" data-xmv="10" data-xmeas="21"><path d="M 120 180 L 120 200 L 210 200 L 210 250" class="stream utility" marker-end="url(#arrow-liquid)" /><text class="label-stream" x="80" y="190">CW-R</text><text class="label-stream" x="85" y="200" font-size="7">(12)</text></g>
+                        <g id="stream-13-condenser-cw" class="stream utility" data-stream="13" data-xmv="11" data-xmeas="22"><path d="M 300 180 L 300 200 L 375 200 L 375 270" class="stream utility" marker-end="url(#arrow-liquid)" /><text class="label-stream" x="260" y="190">CW-C</text><text class="label-stream" x="265" y="200" font-size="7">(13)</text></g>
+                        <g id="stream-stripper-steam" class="stream vapor" data-phase="vapor"><path d="M 1100 150 L 1100 160 L 1030 160 L 1030 200" class="stream vapor" marker-end="url(#arrow-vapor)" /><text class="label-stream" x="1110" y="155">Steam</text></g>
+                    </g>
+                    <g id="feeds">
+                        <g id="stream-01-a-feed" class="stream feed gas" data-stream="1" data-xmeas="1" data-xmv="3" data-phase="gas"><path d="M 50 280 L 100 280 L 100 300 L 150 300" class="stream feed" marker-end="url(#arrow-gas)" /><text class="label-stream" x="70" y="275">A (1)</text></g>
+                        <g id="stream-02-d-feed" class="stream feed gas-feed" data-stream="2" data-xmeas="2" data-xmv="1" data-phase="gas-feed"><path d="M 50 340 L 100 340 L 100 320 L 150 320" class="stream feed" marker-end="url(#arrow-gas)" /><text class="label-stream" x="70" y="335">D (2)</text></g>
+                        <g id="stream-03-e-feed" class="stream feed gas-feed" data-stream="3" data-xmeas="3" data-xmv="2" data-phase="gas-feed"><path d="M 50 380 L 100 380 L 100 340 L 150 340" class="stream feed" marker-end="url(#arrow-gas)" /><text class="label-stream" x="70" y="375">E (3)</text></g>
+                        <g id="stream-04-ac-feed" class="stream feed gas" data-stream="4" data-xmeas="4" data-xmv="4" data-phase="gas"><path d="M 50 180 L 100 180 L 100 160 L 920 160 L 920 210" class="stream feed" marker-end="url(#arrow-gas)" /><text class="label-stream" x="400" y="155">A/C (4)</text></g>
+                    </g>
+                    <g id="feed-mixer"><circle id="node-reactor-feed-mixer" cx="150" cy="320" r="4" fill="#444" stroke="none" data-stream="mixer" /></g>
+                    <g id="streams">
+                        <g id="stream-06-reactor-feed" class="stream mixed reactor-feed" data-stream="6" data-xmeas="6" data-phase="mixed"><path d="M 150 300 L 150 280 L 210 280 L 210 250" class="stream" marker-end="url(#arrow-gas)" /><text class="label-stream" x="160" y="280">Feed (6)</text></g>
+                        <g id="stream-07-reactor-product" class="stream vapor product" data-stream="7" data-phase="vapor"><path d="M 270 320 L 310 320 L 310 320 L 380 320" class="stream vapor" marker-end="url(#arrow-vapor)" /><text class="label-stream" x="320" y="315">Product (7)</text></g>
+                        <g id="stream-condenser-to-separator" class="stream liquid" data-phase="liquid"><path d="M 470 340 L 500 340 L 500 300 L 520 300" class="stream liquid" marker-end="url(#arrow-liquid)" /><text class="label-stream" x="500" y="320">Cond Out</text></g>
+                        <g id="stream-09-purge" class="stream gas purge" data-stream="9" data-xmeas="10" data-xmv="6" data-phase="gas"><path d="M 620 280 L 660 280 L 660 120 L 1100 120" class="stream gas" marker-end="url(#arrow-gas)" /><text class="label-stream" x="680" y="200">Purge (9)</text></g>
+                        <g id="stream-08-recycle" class="stream gas recycle" data-stream="8" data-xmeas="5" data-xmv="5" data-phase="gas"><path d="M 820 590 L 850 590 L 850 700 L 100 700 L 100 360 L 150 360" class="stream recycle" marker-end="url(#arrow-gas)" /><text class="label-stream" x="550" y="720">Recycle (8)</text></g>
+                        <g id="stream-separator-to-compressor" class="stream vapor" data-phase="vapor"><path d="M 620 280 L 650 280 L 650 500 L 770 500 L 770 550" class="stream vapor" marker-end="url(#arrow-vapor)" /><text class="label-stream" x="680" y="380">To Comp</text></g>
+                        <g id="stream-05-stripper-overhead" class="stream gas overhead recycle" data-stream="5" data-phase="gas"><path d="M 920 210 L 850 210 L 850 100 L 80 100 L 80 360 L 150 360" class="stream recycle" marker-end="url(#arrow-gas)" /><text class="label-stream" x="500" y="80">Overhead (5)</text></g>
+                        <g id="stream-10-separator-liquid" class="stream liquid separator-underflow" data-stream="10" data-xmeas="14" data-xmv="7" data-phase="liquid"><path d="M 620 400 L 680 400 L 680 420 L 920 420 L 920 350" class="stream liquid" marker-end="url(#arrow-liquid)" /><text class="label-stream" x="720" y="415">Underflow (10)</text></g>
+                        <g id="stream-11-product" class="stream liquid product" data-stream="11" data-xmeas="17" data-xmv="8" data-phase="liquid"><path d="M 1030 450 L 1100 450 L 1100 550 L 1200 550" class="stream product" marker-end="url(#arrow-liquid)" /><text class="label-stream" x="1090" y="480">Product (11)</text></g>
+                    </g>
+                    <g id="actuators">
+                        <g id="actuator-xmv-01" class="actuator" data-xmv="1" data-stream="2" data-target="stream-02-d-feed"><rect x="85" y="335" width="10" height="10" class="valve-symbol" /><text class="label-xmv" x="90" y="325">1</text></g>
+                        <g id="actuator-xmv-02" class="actuator" data-xmv="2" data-stream="3" data-target="stream-03-e-feed"><rect x="85" y="375" width="10" height="10" class="valve-symbol" /><text class="label-xmv" x="90" y="365">2</text></g>
+                        <g id="actuator-xmv-03" class="actuator" data-xmv="3" data-stream="1" data-target="stream-01-a-feed"><rect x="85" y="275" width="10" height="10" class="valve-symbol" /><text class="label-xmv" x="90" y="265">3</text></g>
+                        <g id="actuator-xmv-04" class="actuator" data-xmv="4" data-stream="4" data-target="stream-04-ac-feed"><rect x="85" y="175" width="10" height="10" class="valve-symbol" /><text class="label-xmv" x="90" y="165">4</text></g>
+                        <g id="actuator-xmv-05" class="actuator" data-xmv="5" data-stream="8" data-target="stream-08-recycle"><circle cx="820" cy="590" r="5" class="valve-symbol" /><text class="label-xmv" x="820" y="608">5</text></g>
+                        <g id="actuator-xmv-06" class="actuator" data-xmv="6" data-stream="9" data-target="stream-09-purge"><circle cx="650" cy="280" r="5" class="valve-symbol" /><text class="label-xmv" x="650" y="255">6</text></g>
+                        <g id="actuator-xmv-07" class="actuator" data-xmv="7" data-stream="10" data-target="stream-10-separator-liquid"><circle cx="665" cy="400" r="5" class="valve-symbol" /><text class="label-xmv" x="665" y="420">7</text></g>
+                        <g id="actuator-xmv-08" class="actuator" data-xmv="8" data-stream="11" data-target="stream-11-product"><circle cx="1015" cy="450" r="5" class="valve-symbol" /><text class="label-xmv" x="1015" y="430">8</text></g>
+                        <g id="actuator-xmv-09" class="actuator" data-xmv="9"><rect x="1020" y="155" width="10" height="10" class="valve-symbol" /><text class="label-xmv" x="1025" y="145">9</text></g>
+                        <g id="actuator-xmv-10" class="actuator" data-xmv="10" data-stream="12" data-target="stream-12-reactor-cw"><rect x="195" y="200" width="10" height="12" class="valve-symbol" /><text class="label-xmv" x="200" y="190">10</text></g>
+                        <g id="actuator-xmv-11" class="actuator" data-xmv="11" data-stream="13" data-target="stream-13-condenser-cw"><rect x="365" y="250" width="10" height="12" class="valve-symbol" /><text class="label-xmv" x="370" y="240">11</text></g>
+                        <g id="actuator-xmv-12" class="actuator" data-xmv="12" data-unit="reactor"><circle cx="210" cy="340" r="30" fill="none" stroke="#666" stroke-width="1.5" stroke-dasharray="2,2" opacity="0.5" /><text class="label-xmv" x="200" y="455">12</text></g>
+                    </g>
+                    <g id="measurements">
+                        <g id="sensor-xmeas-07" class="measurement alarm-ok" data-xmeas="7" data-unit="reactor"><circle cx="270" cy="200" r="5" class="sensor-circle" /><text class="sensor-label" x="270" y="205">P</text><text class="sensor-value" x="290" y="205">--</text></g>
+                        <g id="sensor-xmeas-13" class="measurement" data-xmeas="13" data-unit="separator"><circle cx="650" cy="250" r="5" class="sensor-circle" /><text class="sensor-label" x="650" y="255">P</text><text class="sensor-value" x="670" y="255">--</text></g>
+                        <g id="sensor-xmeas-16" class="measurement" data-xmeas="16" data-unit="stripper"><circle cx="1080" cy="200" r="5" class="sensor-circle" /><text class="sensor-label" x="1080" y="205">P</text><text class="sensor-value" x="1100" y="205">--</text></g>
+                        <g id="sensor-xmeas-09" class="measurement alarm-ok" data-xmeas="9" data-unit="reactor"><circle cx="120" cy="340" r="5" class="sensor-circle" /><text class="sensor-label" x="120" y="345">T</text><text class="sensor-value" x="100" y="365">--</text></g>
+                        <g id="sensor-xmeas-11" class="measurement" data-xmeas="11" data-unit="separator"><circle cx="680" cy="320" r="5" class="sensor-circle" /><text class="sensor-label" x="680" y="325">T</text><text class="sensor-value" x="700" y="325">--</text></g>
+                        <g id="sensor-xmeas-18" class="measurement" data-xmeas="18" data-unit="stripper"><circle cx="1080" cy="320" r="5" class="sensor-circle" /><text class="sensor-label" x="1080" y="325">T</text><text class="sensor-value" x="1100" y="325">--</text></g>
+                        <g id="sensor-xmeas-08" class="measurement alarm-ok" data-xmeas="8" data-unit="reactor"><circle cx="150" cy="340" r="5" class="sensor-circle" /><text class="sensor-label" x="150" y="345">L</text><text class="sensor-value" x="130" y="360">--</text></g>
+                        <g id="sensor-xmeas-12" class="measurement alarm-ok" data-xmeas="12" data-unit="separator"><circle cx="710" cy="340" r="5" class="sensor-circle" /><text class="sensor-label" x="710" y="345">L</text><text class="sensor-value" x="730" y="345">--</text></g>
+                        <g id="sensor-xmeas-15" class="measurement alarm-ok" data-xmeas="15" data-unit="stripper"><circle cx="1120" cy="320" r="5" class="sensor-circle" /><text class="sensor-label" x="1120" y="325">L</text><text class="sensor-value" x="1140" y="325">--</text></g>
+                        <g id="sensor-xmeas-01" class="measurement" data-xmeas="1" data-stream="1"><circle cx="70" cy="280" r="4" class="sensor-circle" /><text class="sensor-label" x="70" y="284">F</text></g>
+                        <g id="sensor-xmeas-02" class="measurement" data-xmeas="2" data-stream="2"><circle cx="70" cy="340" r="4" class="sensor-circle" /><text class="sensor-label" x="70" y="344">F</text></g>
+                        <g id="sensor-xmeas-03" class="measurement" data-xmeas="3" data-stream="3"><circle cx="70" cy="380" r="4" class="sensor-circle" /><text class="sensor-label" x="70" y="384">F</text></g>
+                        <g id="sensor-xmeas-05" class="measurement" data-xmeas="5" data-stream="8"><circle cx="780" cy="550" r="4" class="sensor-circle" /><text class="sensor-label" x="780" y="554">F</text></g>
+                        <g id="sensor-xmeas-21" class="measurement" data-xmeas="21" data-stream="12"><circle cx="100" cy="240" r="4" class="sensor-circle" /><text class="sensor-label" x="100" y="244">T</text></g>
+                        <g id="sensor-xmeas-22" class="measurement" data-xmeas="22" data-stream="13"><circle cx="300" cy="210" r="4" class="sensor-circle" /><text class="sensor-label" x="300" y="214">T</text></g>
+                    </g>
+                    <g id="analyzers">
+                        <g id="analyzer-reactor-feed" class="analyzer" data-stream="6" data-xmeas-range="23-28" data-components="A,B,C,D,E,F" data-sample-period-h="0.1"><rect x="160" y="270" width="20" height="20" class="analyzer-box" /><text class="analyzer-label" x="170" y="283">AF</text></g>
+                        <g id="analyzer-purge" class="analyzer" data-stream="9" data-xmeas-range="29-36" data-components="A,B,C,D,E,F,G,H" data-sample-period-h="0.1"><rect x="690" y="270" width="20" height="20" class="analyzer-box" /><text class="analyzer-label" x="700" y="283">PG</text></g>
+                        <g id="analyzer-product" class="analyzer" data-stream="11" data-xmeas-range="37-41" data-components="D,E,F,G,H" data-sample-period-h="0.25"><rect x="1100" y="440" width="20" height="20" class="analyzer-box" /><text class="analyzer-label" x="1110" y="453">PR</text></g>
+                    </g>
+                    <g id="labels"><text class="label-stream" x="30" y="900">Legend: PI=Pressure | TI=Temperature | LI=Level | FI=Flow</text><text class="label-stream" x="400" y="900">Stream types: — = liquid | - - = gas | ··· = vapor | ▬ = utility</text></g>
+                </svg>
+                </div>
+            </section>
+
+            <!-- Resizable Divider -->
+            <div class="resizable-divider" id="resize-divider"></div>
+
+            <!-- Right: Charts -->
+            <section class="panel panel-charts">
+                <div class="trends-header">
+                    <h2>Trends</h2>
+                    <button id="btn-sim-pause" class="sim-control-btn sim-running" title="Pause simulation">⏸ Pause</button>
+                </div>
+                <div class="chart-grid">
+                    <div class="chart-container"><canvas id="chart-pressure"></canvas></div>
+                    <div class="chart-container"><canvas id="chart-temperature"></canvas></div>
+                    <div class="chart-container"><canvas id="chart-levels"></canvas></div>
+                    <div class="chart-container"><canvas id="chart-flows"></canvas></div>
+                </div>
+            </section>
+        </div>
 
         <!-- Row 3: 4 painéis lado a lado -->
         <div class="row-split-4">
@@ -103,6 +228,7 @@
         </div>
     </main>
 
+    <script src="/static/diagram-animator.js"></script>
     <script src="/static/app.js"></script>
 </body>
 </html>

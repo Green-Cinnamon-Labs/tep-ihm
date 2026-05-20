@@ -373,6 +373,11 @@ function update(data) {
     // IDV panel — track current active list and render
     _currentActiveIdv = data.active_idv || [];
     renderIdv(_currentActiveIdv);
+
+    // Diagram animation (P&ID)
+    if (typeof updateDiagram === 'function') {
+        updateDiagram(xmeas, xmv);
+    }
 }
 
 function updateAlarms(alarms) {
@@ -419,6 +424,44 @@ function pushData(chart, values) {
     chart.update('none');
 }
 
+// ── Resizable diagram/charts divider ─────────────────────────────────────────
+
+function initResizableDivider() {
+    const divider = document.getElementById('resize-divider');
+    const container = document.querySelector('.row-diagram-charts');
+    if (!divider || !container) return;
+
+    let isResizing = false;
+
+    divider.addEventListener('mousedown', () => {
+        isResizing = true;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+
+        const rect = container.getBoundingClientRect();
+        const newLeftWidth = e.clientX - rect.left;
+        const totalWidth = rect.width;
+        const rightWidth = totalWidth - newLeftWidth - 6; // 6px for divider
+
+        if (newLeftWidth > 200 && rightWidth > 200) { // Min 200px for each
+            container.style.gridTemplateColumns = `${newLeftWidth}px 6px ${rightWidth}px`;
+        }
+    });
+
+    document.addEventListener('mouseup', () => {
+        isResizing = false;
+        document.body.style.cursor = 'auto';
+        document.body.style.userSelect = 'auto';
+    });
+
+    console.log('[resize] Divider initialized');
+}
+
+initResizableDivider();
 connect();
 
 // ── Recording controls ────────────────────────────────────────────────────────

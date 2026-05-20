@@ -486,13 +486,14 @@ main {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
+    flex: 1;
 }
 
 .chart-container {
     background: #12141c;
     border-radius: 4px;
     padding: 8px;
-    height: 220px;
+    height: 200px;
 }
 
 /* ── Operator placeholder ────────────────────────────────────────────────── */
@@ -502,10 +503,90 @@ main {
     font-style: italic;
 }
 
+/* ── Diagram + Charts Layout ────────────────────────────────────────────────── */
+
+.row-diagram-charts {
+    display: grid;
+    grid-template-columns: 1.2fr 6px 1fr;
+    gap: 0;
+    align-items: stretch;
+}
+
+.resizable-divider {
+    background: #2a2d3a;
+    cursor: col-resize;
+    user-select: none;
+    hover: background #3a3d4a;
+    transition: background 0.2s;
+}
+
+.resizable-divider:hover {
+    background: #3a3d4a;
+}
+
+.panel-diagram {
+    display: flex;
+    flex-direction: column;
+}
+
+.panel-diagram h2 {
+    flex-shrink: 0;
+}
+
+.panel-charts {
+    display: flex;
+    flex-direction: column;
+}
+
+.panel-charts h2 {
+    flex-shrink: 0;
+}
+
+.panel-fullwidth {
+    width: 100%;
+}
+
+.panel-narrow {
+    grid-column: 1;
+}
+
+.panel-wide {
+    grid-column: 2 / -1;
+}
+
+#diagram-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 500px;
+    background: #12141c;
+    overflow: auto;
+    flex: 1;
+    cursor: grab;
+    position: relative;
+}
+
+#diagram-container.panning {
+    cursor: grabbing;
+}
+
+#diagram-container svg {
+    max-width: none;
+    height: auto;
+    transform-origin: 0 0;
+    transition: none;
+}
+
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 
 @media (max-width: 1600px) {
     .row-split-4 { grid-template-columns: 1fr 1fr; }
+    .row-diagram-charts { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 1200px) {
+    .row-diagram-charts { grid-template-columns: 1fr; }
+    #diagram-container { min-height: 400px; }
 }
 
 @media (max-width: 900px) {
