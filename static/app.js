@@ -304,6 +304,94 @@ async function toggleIdv(event) {
 
 renderIdv([]);
 
+// ── Floating panels: toggle + drag ───────────────────────────────────────────
+
+function _setPanel(panelId, btnId, open) {
+    const panel = document.getElementById(panelId);
+    const btn   = document.getElementById(btnId);
+    if (!panel) return;
+    panel.hidden = !open;
+    if (btn) btn.classList.toggle('panel-btn-open', open);
+}
+
+function toggleIdvPanel() {
+    const panel = document.getElementById('idv-panel');
+    _setPanel('idv-panel', 'btn-idv', !!panel?.hidden);
+}
+
+function toggleConsolePanel() {
+    const panel = document.getElementById('console-panel');
+    _setPanel('console-panel', 'btn-console', !!panel?.hidden);
+}
+
+// ── Console intercept ────────────────────────────────────────────────────────
+
+const _LEVEL_COLOR = { LOG: '#8ab4ce', WRN: '#f6c458', ERR: '#ef9a9a', INF: '#90caf9' };
+
+function _consoleLog(msg, level = 'LOG') {
+    const container = document.getElementById('console-log');
+    if (!container) return;
+    const now  = new Date().toLocaleTimeString('pt-BR', { hour12: false });
+    const line = document.createElement('div');
+    line.className = 'demo-log-line';
+    line.style.color = _LEVEL_COLOR[level] || _LEVEL_COLOR.LOG;
+    line.textContent = `[${now}] [${level}] ${msg}`;
+    container.appendChild(line);
+    container.scrollTop = container.scrollHeight;
+}
+
+(function _interceptConsole() {
+    const _orig = { log: console.log, warn: console.warn, error: console.error, info: console.info };
+    console.log   = (...a) => { _orig.log(...a);   _consoleLog(a.join(' '), 'LOG'); };
+    console.warn  = (...a) => { _orig.warn(...a);  _consoleLog(a.join(' '), 'WRN'); };
+    console.error = (...a) => { _orig.error(...a); _consoleLog(a.join(' '), 'ERR'); };
+    console.info  = (...a) => { _orig.info(...a);  _consoleLog(a.join(' '), 'INF'); };
+})();
+
+function makeDraggable(panel, handle) {
+    let startX, startY, origLeft, origTop;
+    handle.style.cursor = 'grab';
+
+    handle.addEventListener('mousedown', e => {
+        const rect = panel.getBoundingClientRect();
+        startX  = e.clientX;
+        startY  = e.clientY;
+        origLeft = rect.left;
+        origTop  = rect.top;
+
+        // Converte de right/bottom para left/top absoluto para poder arrastar
+        panel.style.right  = 'auto';
+        panel.style.bottom = 'auto';
+        panel.style.left   = origLeft + 'px';
+        panel.style.top    = origTop  + 'px';
+
+        handle.style.cursor = 'grabbing';
+
+        const onMove = e => {
+            panel.style.left = (origLeft + e.clientX - startX) + 'px';
+            panel.style.top  = (origTop  + e.clientY - startY) + 'px';
+        };
+        const onUp = () => {
+            handle.style.cursor = 'grab';
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup',   onUp);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup',   onUp);
+        e.preventDefault();
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const demoPanel   = document.getElementById('demo-panel');
+    const demoHandle  = demoPanel?.querySelector('.demo-panel-header');
+    if (demoPanel && demoHandle) makeDraggable(demoPanel, demoHandle);
+
+    const idvPanel    = document.getElementById('idv-panel');
+    const idvHandle   = idvPanel?.querySelector('.idv-panel-header');
+    if (idvPanel && idvHandle) makeDraggable(idvPanel, idvHandle);
+});
+
 // ── Update ───────────────────────────────────────────────────────────────────
 
 function update(data) {

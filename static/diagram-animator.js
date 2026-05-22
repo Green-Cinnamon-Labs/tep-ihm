@@ -56,7 +56,7 @@ const _RGB_REMAP = {
  */
 function _resolveStyleProp(propName, value) {
     if (value.includes('light-dark(')) {
-        const darkIsFirst = value.includes('#000000') || value.includes('rgb(0, 0, 0)');
+        const darkIsFirst = value.includes('#000000') || value.includes('rgb(0, 0, 0)') || /light-dark\(\s*black\b/.test(value);
 
         if (propName === 'fill' || propName === 'background-color') {
             return darkIsFirst

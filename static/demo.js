@@ -143,14 +143,7 @@ const DEMO_STEPS = [
 // ── Log panel ────────────────────────────────────────────────────────────────
 
 function _demoLog(msg) {
-    const log = document.getElementById('demo-log');
-    if (!log) return;
-    const now = new Date().toLocaleTimeString('pt-BR', { hour12: false });
-    const line = document.createElement('div');
-    line.className = 'demo-log-line';
-    line.textContent = `[${now}]  ${msg}`;
-    log.appendChild(line);
-    log.scrollTop = log.scrollHeight;
+    if (typeof _consoleLog === 'function') _consoleLog(msg, 'LOG');
 }
 
 // ── Controle ─────────────────────────────────────────────────────────────────
@@ -161,14 +154,8 @@ function startDemo() {
     _demoStepIndex = 0;
     _demoCurrent = { xmeas: _nominalXmeas(), xmv: _nominalXmv() };
 
-    const panel = document.getElementById('demo-panel');
-    if (panel) panel.hidden = false;
-
-    const log = document.getElementById('demo-log');
-    if (log) log.innerHTML = '';
-
     const btn = document.getElementById('btn-demo');
-    if (btn) { btn.textContent = '⏹ Demo'; btn.classList.add('demo-btn-active'); }
+    if (btn) { btn.textContent = '⏹ Demo'; btn.classList.add('panel-btn-open'); }
 
     _demoLog('━━━  DEMO MODE  ━━━  planta desconectada da tela');
     _runDemoStep();
@@ -179,7 +166,7 @@ function stopDemo() {
     if (_demoTimerId) { clearTimeout(_demoTimerId); _demoTimerId = null; }
 
     const btn = document.getElementById('btn-demo');
-    if (btn) { btn.textContent = '▶ Demo'; btn.classList.remove('demo-btn-active'); }
+    if (btn) { btn.textContent = '▶ Demo'; btn.classList.remove('panel-btn-open'); }
 
     _demoLog('⏹  Demo encerrado.');
 }

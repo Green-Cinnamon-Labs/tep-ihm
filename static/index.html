@@ -14,7 +14,7 @@
         <span id="sim-time" class="header-info">t = --</span>
         <span id="plant-status" class="header-info status-tag">--</span>
         <span id="connection-status" class="header-info status-disconnected">desconectado</span>
-        <button id="btn-reconnect" onclick="reconnectPlant()" style="display:none; margin-left:8px; padding:3px 10px; background:#1565c0; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:12px;">⟳ Tentar conectar</button>
+        <button id="btn-reconnect" onclick="reconnectPlant()" class="sim-control-btn" style="display:none;">⟳ Tentar conectar</button>
         <span id="rec-controls" class="header-rec">
             <button id="btn-rec-start" class="rec-btn rec-btn-start" title="Inicia gravação (cria novo CSV)">⏹ Record</button>
             <button id="btn-rec-stop" class="rec-btn rec-btn-stop" title="Para gravação" disabled>⏸ Stop</button>
@@ -24,15 +24,26 @@
         </span>
         <button id="btn-sim-pause" class="sim-control-btn sim-running" title="Pause simulation">⏸ Pause</button>
         <button id="btn-demo" class="sim-control-btn" onclick="startDemo()" title="Demonstração visual ISA-101 (sem planta)">▶ Demo</button>
+        <button id="btn-idv" class="sim-control-btn" onclick="toggleIdvPanel()" title="Painel de distúrbios IDV">⚡ IDV</button>
+        <button id="btn-console" class="sim-control-btn" onclick="toggleConsolePanel()" title="Console de logs">▣ Console</button>
     </header>
 
-    <!-- Demo terminal overlay -->
-    <div id="demo-panel" class="demo-panel" hidden>
-        <div class="demo-panel-header">
-            <span>■ DEMO MODE — valores sintéticos</span>
-            <button onclick="stopDemo()" class="demo-close">✕</button>
+    <!-- IDV disturbances floating panel -->
+    <div id="idv-panel" class="idv-panel" hidden>
+        <div class="idv-panel-header">
+            <span>⚡ DISTÚRBIOS — IDV</span>
+            <button onclick="_setPanel('idv-panel','btn-idv',false)" class="idv-panel-close">✕</button>
         </div>
-        <div id="demo-log" class="demo-log"></div>
+        <div id="idv-list" class="idv-panel-body"></div>
+    </div>
+
+    <!-- Console panel -->
+    <div id="console-panel" class="demo-panel" hidden>
+        <div class="demo-panel-header">
+            <span>▣ CONSOLE</span>
+            <button onclick="_setPanel('console-panel','btn-console',false)" class="demo-close">✕</button>
+        </div>
+        <div id="console-log" class="demo-log"></div>
     </div>
 
     <!-- ISD Banner (hidden by default) -->
@@ -73,7 +84,7 @@
             <canvas id="chart-flows"></canvas>
             <table id="xmeas-table"><tbody></tbody></table>
             <table id="xmv-table"><tbody></tbody></table>
-            <div id="idv-list"></div>
+            <div id="_idv-list-placeholder" style="display:none"></div>
             <div id="operator-content">
                 <table id="operator-meta-table">
                     <tr><td></td><td id="op-phase"></td></tr>

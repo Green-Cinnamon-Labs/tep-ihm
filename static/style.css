@@ -1,3 +1,6 @@
+/* Garante que [hidden] nunca seja sobrescrito por display:flex/grid de classes */
+[hidden] { display: none !important; }
+
 /* ── ISA-101 semantic palette ────────────────────────────────────────────── */
 :root {
     --hmi-bg:       #D9DEE2;
@@ -88,72 +91,44 @@ header {
 }
 
 .rec-btn {
-    background: #263238;
-    color: #80cbc4;
-    border: 1px solid #37474f;
-    border-radius: 3px;
-    padding: 2px 8px;
+    background: #1565c0;
+    color: #ffffff;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 10px;
     font-size: 0.75rem;
     cursor: pointer;
     text-decoration: none;
+    white-space: nowrap;
 }
 
 .rec-btn:hover {
-    background: #37474f;
+    background: #1976d2;
 }
 
 .rec-btn:disabled {
-    opacity: 0.4;
+    opacity: 0.35;
     cursor: not-allowed;
 }
 
-.rec-btn-start {
-    background: #1b5e20;
-    color: #81c784;
-    border-color: #4caf50;
-}
-
-.rec-btn-start:not(:disabled):hover {
-    background: #2e7d32;
-}
-
-.rec-btn-stop {
-    background: #b71c1c;
-    color: #ef9a9a;
-    border-color: #d32f2f;
-}
-
-.rec-btn-stop:not(:disabled):hover {
-    background: #c62828;
-}
-
-.rec-btn-download {
-    background: #0d47a1;
-    color: #64b5f6;
-    border-color: #1976d2;
-}
-
-.rec-btn-download:not(:disabled):hover {
-    background: #1565c0;
-}
-
 .rec-status {
-    color: #ef9a9a;
+    color: #90b8d8;
     font-size: 0.75rem;
-    padding: 2px 8px;
-    border-radius: 3px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    background: #1565c0;
     background: #2a2d3a;
     min-width: 80px;
     text-align: center;
 }
 
 .rec-status-active {
-    background: #1b5e20;
-    color: #81c784;
+    background: #0d47a1;
+    color: #ffffff;
 }
 
 .rec-timer {
-    color: #999;
+    color: #90b8d8;
     font-size: 0.75rem;
     font-weight: bold;
     font-family: 'Courier New', monospace;
@@ -162,10 +137,10 @@ header {
 }
 
 .rec-timer-active {
-    color: #81c784;
-    background: #1b5e20;
-    padding: 2px 8px;
-    border-radius: 3px;
+    color: #ffffff;
+    background: #0d47a1;
+    padding: 4px 8px;
+    border-radius: 4px;
 }
 
 .idv-grid {
@@ -278,29 +253,27 @@ main {
 }
 
 .sim-control-btn {
-    background: #1b5e20;
-    color: #81c784;
-    border: 1px solid #4caf50;
-    border-radius: 3px;
-    padding: 4px 12px;
+    background: #1565c0;
+    color: #ffffff;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 10px;
     font-size: 0.75rem;
     cursor: pointer;
     white-space: nowrap;
-    transition: all 0.2s;
+    transition: background 0.15s;
 }
 
 .sim-control-btn:hover {
-    background: #2e7d32;
+    background: #1976d2;
 }
 
 .sim-control-btn.sim-paused {
-    background: #b71c1c;
-    color: #ef9a9a;
-    border-color: #d32f2f;
+    background: #0d47a1;
 }
 
 .sim-control-btn.sim-paused:hover {
-    background: #c62828;
+    background: #1565c0;
 }
 
 /* ── Row splits ─────────────────────────────────────────────────────────── */
@@ -605,6 +578,108 @@ main {
     transition: none;
 }
 
+/* ── IDV disturbances floating panel ────────────────────────────────────────── */
+
+.idv-panel {
+    position: fixed;
+    top: 48px;
+    right: 16px;
+    width: 340px;
+    max-height: calc(100vh - 80px);
+    background: #0e1520;
+    border: 1px solid #1e3a5a;
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    z-index: 999;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.6);
+    font-family: 'Consolas', 'Fira Code', 'Courier New', monospace;
+    font-size: 12px;
+}
+
+.idv-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 10px;
+    background: #121e30;
+    border-bottom: 1px solid #1e3a5a;
+    color: #8ab4ce;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+}
+
+.idv-panel-close {
+    background: none;
+    border: none;
+    color: #546e7a;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0 2px;
+    line-height: 1;
+}
+
+.idv-panel-close:hover {
+    color: #ef5350;
+}
+
+.idv-panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px 8px;
+}
+
+/* Override idv-item styles inside the floating panel */
+.idv-panel-body .idv-item {
+    background: #121e30;
+    border: 1px solid #1e3248;
+    border-radius: 3px;
+    margin-bottom: 3px;
+    padding: 4px 8px;
+    color: #8ab4ce;
+    font-size: 11px;
+}
+
+.idv-panel-body .idv-item.idv-active {
+    background: #1a1400;
+    border-color: #B7791F;
+    color: #f6c458;
+    opacity: 1;
+}
+
+.idv-panel-body .idv-content {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.idv-panel-body .idv-toggle {
+    flex-shrink: 0;
+    padding: 2px 7px;
+    font-size: 11px;
+    border-radius: 3px;
+    cursor: pointer;
+    border: 1px solid #263238;
+    background: #1a2634;
+    color: #546e7a;
+    margin-left: 6px;
+}
+
+.idv-panel-body .idv-toggle-on {
+    background: #3a1800;
+    border-color: #B7791F;
+    color: #f6c458;
+}
+
+.idv-panel-body .idv-toggle-off:hover {
+    background: #1e3248;
+    border-color: #4a7aaf;
+    color: #90caf9;
+}
+
 /* ── Demo terminal overlay ──────────────────────────────────────────────────── */
 
 .demo-panel {
@@ -613,8 +688,8 @@ main {
     right: 16px;
     width: 480px;
     max-height: 260px;
-    background: #0a0c10;
-    border: 1px solid #2a5a2a;
+    background: #0e1520;
+    border: 1px solid #1e3a5a;
     border-radius: 4px;
     display: flex;
     flex-direction: column;
@@ -627,13 +702,12 @@ main {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 4px 10px;
-    background: #0d1f0d;
-    border-bottom: 1px solid #2a5a2a;
-    color: #4caf50;
+    padding: 6px 10px;
+    background: #121e30;
+    border-bottom: 1px solid #1e3a5a;
+    color: #8ab4ce;
     font-size: 11px;
-    font-weight: bold;
-    letter-spacing: 1px;
+    letter-spacing: 0.05em;
     border-radius: 4px 4px 0 0;
 }
 
@@ -659,19 +733,29 @@ main {
 }
 
 .demo-log-line {
-    color: #66bb6a;
+    color: #8ab4ce;
     white-space: pre-wrap;
     word-break: break-word;
 }
 
 .demo-log-line:last-child {
-    color: #a5d6a7;
+    color: #b8d4e8;
 }
 
+/* Botão quando painel está ABERTO */
+.panel-btn-open {
+    background: #0d47a1 !important;
+    color: #ffffff !important;
+    outline: 2px solid #5a9fd4 !important;
+    outline-offset: 1px !important;
+}
+
+/* mantido por compatibilidade com demo.js */
 .demo-btn-active {
-    background: #4a148c !important;
-    color: #ce93d8 !important;
-    border-color: #7b1fa2 !important;
+    background: #0d47a1 !important;
+    color: #ffffff !important;
+    outline: 2px solid #5a9fd4 !important;
+    outline-offset: 1px !important;
 }
 
 /* ── Responsive ──────────────────────────────────────────────────────────── */
