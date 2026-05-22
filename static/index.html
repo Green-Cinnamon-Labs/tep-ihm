@@ -23,7 +23,12 @@
             <span id="rec-timer" class="rec-timer">00:00</span>
         </span>
         <button id="btn-sim-pause" class="sim-control-btn sim-running" title="Pause simulation">⏸ Pause</button>
-        <button id="btn-demo" class="sim-control-btn" onclick="startDemo()" title="Demonstração visual ISA-101 (sem planta)">▶ Demo</button>
+        <div class="demo-dropdown-wrap">
+            <button id="btn-demo" class="sim-control-btn" onclick="toggleDemoDropdown()" title="Demonstrações visuais ISA-101">▶ Demo ▾</button>
+            <div id="demo-dropdown" class="demo-dropdown" hidden>
+                <!-- preenchido por demo.js -->
+            </div>
+        </div>
         <button id="btn-idv" class="sim-control-btn" onclick="toggleIdvPanel()" title="Painel de distúrbios IDV">⚡ IDV</button>
         <button id="btn-console" class="sim-control-btn" onclick="toggleConsolePanel()" title="Console de logs">▣ Console</button>
     </header>
@@ -60,13 +65,11 @@
                 </table>
             </section>
 
-            <section id="alarms-panel" class="panel panel-wide">
-                <h2>Alarms</h2>
-                <div class="alarms-columns">
-                    <div id="alarms-col-left"></div>
-                    <div id="alarms-col-right"></div>
-                </div>
-            </section>
+            <!-- Alarms moved to SVG diagram badges (ISA-101) -->
+            <div hidden>
+                <div id="alarms-col-left"></div>
+                <div id="alarms-col-right"></div>
+            </div>
         </div>
 
         <!-- Diagram: full remaining area -->

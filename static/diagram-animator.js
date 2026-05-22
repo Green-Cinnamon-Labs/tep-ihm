@@ -183,17 +183,13 @@ const VESSEL_ALARM_LIMITS = {
     'unit-compressor-3':    { hi: 400, hi_hi: 450 },
 };
 
-function colorizeVessel(vesselId, tempC) {
+// ISA-101 §7: vasos permanecem em cinza neutro — cor de ênfase reservada para badges de alarme.
+function colorizeVessel(vesselId) {
     const vessel = document.querySelector(`[data-cell-id="${vesselId}"]`);
     if (!vessel) return;
-    const { hi = 150, hi_hi = 175 } = VESSEL_ALARM_LIMITS[vesselId] || {};
-    const color   = tempC > hi_hi ? '#B00020'  // --hmi-alarm
-                  : tempC > hi    ? '#B7791F'  // --hmi-warning
-                  :                 '#6F767D'; // --hmi-line (normal)
-    const opacity = tempC > hi    ? '0.55' : '0.20';
     vessel.querySelectorAll('path, ellipse, rect').forEach(el => {
-        el.style.fill        = color;
-        el.style.fillOpacity = opacity;
+        el.style.fill        = '#6F767D';
+        el.style.fillOpacity = '0.20';
     });
 }
 
@@ -305,15 +301,15 @@ function updateAnalyzerDisplay(analyzerId, xmeasValues) {
 function updateDiagram(xmeas, xmv) {
     if (!xmeas || !xmv) return;
 
-    // Vasos — colorização por temperatura
-    colorizeVessel('unit-reactor',         xmeas[8]);   // XMEAS(9)  temperatura do reator
-    colorizeVessel('unit-separator',       xmeas[10]);  // XMEAS(11) temperatura do separador
-    colorizeVessel('unit-stripper',        xmeas[17]);  // XMEAS(18) temperatura do stripper
-    colorizeVessel('unit-condenser',       xmeas[21]);  // XMEAS(22) saída CWS condensador
-    colorizeVessel('unit-stripper-boiler', xmeas[17]);  // proxy: temperatura do stripper
-    colorizeVessel('unit-compressor-1',    xmeas[19]);  // XMEAS(20) trabalho do compressor (kW)
-    colorizeVessel('unit-compressor-2',    xmeas[19]);
-    colorizeVessel('unit-compressor-3',    xmeas[19]);
+    // Vasos — cinza neutro (ISA-101 §7). Alarmes comunicados por badges, não por cor do vaso.
+    colorizeVessel('unit-reactor');
+    colorizeVessel('unit-separator');
+    colorizeVessel('unit-stripper');
+    colorizeVessel('unit-condenser');
+    colorizeVessel('unit-stripper-boiler');
+    colorizeVessel('unit-compressor-1');
+    colorizeVessel('unit-compressor-2');
+    colorizeVessel('unit-compressor-3');
 
     // Streams de processo — largura proporcional à vazão
     updateStreamWidth('stream-01-a-feed-down', xmeas[0]);     // XMEAS(1)  A feed

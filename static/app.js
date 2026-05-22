@@ -137,7 +137,6 @@ const $simTime = document.getElementById('sim-time');
 const $plantStatus = document.getElementById('plant-status');
 const $solverDeriv = document.getElementById('solver-deriv');
 const $solverStatus = document.getElementById('solver-status');
-const $alarmsPanel = document.getElementById('alarms-panel');
 const $alarmsLeft = document.getElementById('alarms-col-left');
 const $alarmsRight = document.getElementById('alarms-col-right');
 const $xmeasTbody = document.querySelector('#xmeas-table tbody');
@@ -326,15 +325,12 @@ function toggleConsolePanel() {
 
 // ── Console intercept ────────────────────────────────────────────────────────
 
-const _LEVEL_COLOR = { LOG: '#8ab4ce', WRN: '#f6c458', ERR: '#ef9a9a', INF: '#90caf9' };
-
 function _consoleLog(msg, level = 'LOG') {
     const container = document.getElementById('console-log');
     if (!container) return;
     const now  = new Date().toLocaleTimeString('pt-BR', { hour12: false });
     const line = document.createElement('div');
-    line.className = 'demo-log-line';
-    line.style.color = _LEVEL_COLOR[level] || _LEVEL_COLOR.LOG;
+    line.className = `demo-log-line log-${level}`;
     line.textContent = `[${now}] [${level}] ${msg}`;
     container.appendChild(line);
     container.scrollTop = container.scrollHeight;
@@ -349,46 +345,48 @@ function _consoleLog(msg, level = 'LOG') {
 })();
 
 function makeDraggable(panel, handle) {
-    let startX, startY, origLeft, origTop;
-    handle.style.cursor = 'grab';
+    handle.style.cursor    = 'grab';
+    handle.style.userSelect = 'none';
 
-    handle.addEventListener('mousedown', e => {
-        const rect = panel.getBoundingClientRect();
-        startX  = e.clientX;
-        startY  = e.clientY;
-        origLeft = rect.left;
-        origTop  = rect.top;
+    handle.addEventListener('pointerdown', e => {
+        if (e.button !== 0) return;
 
-        // Converte de right/bottom para left/top absoluto para poder arrastar
+        const rect    = panel.getBoundingClientRect();
+        const startX  = e.clientX;
+        const startY  = e.clientY;
+        const origLeft = rect.left;
+        const origTop  = rect.top;
+
         panel.style.right  = 'auto';
         panel.style.bottom = 'auto';
         panel.style.left   = origLeft + 'px';
         panel.style.top    = origTop  + 'px';
 
         handle.style.cursor = 'grabbing';
+        handle.setPointerCapture(e.pointerId);
 
-        const onMove = e => {
-            panel.style.left = (origLeft + e.clientX - startX) + 'px';
-            panel.style.top  = (origTop  + e.clientY - startY) + 'px';
+        const onMove = ev => {
+            panel.style.left = (origLeft + ev.clientX - startX) + 'px';
+            panel.style.top  = (origTop  + ev.clientY - startY) + 'px';
         };
         const onUp = () => {
             handle.style.cursor = 'grab';
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup',   onUp);
+            handle.removeEventListener('pointermove', onMove);
+            handle.removeEventListener('pointerup',   onUp);
         };
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup',   onUp);
+        handle.addEventListener('pointermove', onMove);
+        handle.addEventListener('pointerup',   onUp);
         e.preventDefault();
     });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    const demoPanel   = document.getElementById('demo-panel');
-    const demoHandle  = demoPanel?.querySelector('.demo-panel-header');
+    const demoPanel  = document.getElementById('console-panel');
+    const demoHandle = demoPanel?.querySelector('.demo-panel-header');
     if (demoPanel && demoHandle) makeDraggable(demoPanel, demoHandle);
 
-    const idvPanel    = document.getElementById('idv-panel');
-    const idvHandle   = idvPanel?.querySelector('.idv-panel-header');
+    const idvPanel  = document.getElementById('idv-panel');
+    const idvHandle = idvPanel?.querySelector('.idv-panel-header');
     if (idvPanel && idvHandle) makeDraggable(idvPanel, idvHandle);
 });
 
@@ -438,8 +436,10 @@ function update(data) {
         $plantStatus.className = 'header-info status-tag status-ok';
     }
 
-    // Alarms (full list, matching ratatui two-column layout)
-    updateAlarms(alarms);
+    // Alarms — suprimido durante demo mode (badges geridos pelo demo)
+    if (!window._demoActive) {
+        updateAlarms(alarms);
+    }
 
     // Time label for charts
     const label = t_h.toFixed(1);
@@ -487,30 +487,100 @@ function update(data) {
     }
 }
 
+// Catálogo unificado: gRPC alarms + limites locais → elemento SVG + severidade
+// severity 'alarm' = hi_hi (quadrado vermelho) | 'warning' = hi/lo (triângulo âmbar)
+const ALARM_CATALOG = [
+    { variable: 'Reactor High Pressure',    element: 'sensor-xmeas-07', severity: 'alarm'   },
+    { variable: 'Reactor High Level',       element: 'sensor-xmeas-08', severity: 'alarm'   },
+    { variable: 'Reactor High Temperature', element: 'unit-reactor',    severity: 'alarm'   },
+    { variable: 'Reactor Low Level',        element: 'sensor-xmeas-08', severity: 'warning', offset: 'below' },
+    { variable: 'Separator High Level',     element: 'sensor-xmeas-12', severity: 'alarm'   },
+    { variable: 'Separator Low Level',      element: 'sensor-xmeas-12', severity: 'warning', offset: 'below' },
+    { variable: 'Stripper High Level',      element: 'sensor-xmeas-15', severity: 'alarm'   },
+    { variable: 'Stripper Low Level',       element: 'sensor-xmeas-15', severity: 'warning', offset: 'below' },
+    { variable: 'Stripper High Underflow',  element: 'unit-stripper',   severity: 'alarm'   },
+    // Locais (temperatura de vasos e compressores — derivados pelo frontend)
+    { variable: 'Separator High Temperature', element: 'unit-separator',       severity: 'alarm'   },
+    { variable: 'Stripper High Temperature',  element: 'unit-stripper',        severity: 'alarm'   },
+    { variable: 'Condenser High Temperature', element: 'unit-condenser',       severity: 'warning' },
+    { variable: 'Compressor High Work',       element: 'unit-compressor-1',    severity: 'alarm'   },
+];
+
+const _SEV_ICON = {
+    alarm:   '/static/sev-1.drawio.png',
+    warning: '/static/sev-2.drawio.png',
+    advisory:'/static/sev-3.drawio.png',
+};
+
+function _badgeShape(NS, entry, cx, cy, n) {
+    const g = document.createElementNS(NS, 'g');
+    g.setAttribute('id', `alarm-badge-${n}`);
+    g.setAttribute('pointer-events', 'none');
+
+    const S    = 24;
+    const href = _SEV_ICON[entry.severity] || _SEV_ICON.alarm;
+
+    const img = document.createElementNS(NS, 'image');
+    img.setAttribute('href', href);
+    img.setAttribute('x', cx - S / 2);
+    img.setAttribute('y', cy - S / 2);
+    img.setAttribute('width',  S);
+    img.setAttribute('height', S);
+
+    g.appendChild(img);
+    return g;
+}
+
+// Aceita dois formatos:
+//   gRPC:   [{variable, active}]          → resolve element+severity via ALARM_CATALOG
+//   direto: [{element, severity, active}] → usa diretamente (usado pelo demo tour)
+function renderAlarmBadges(alarms) {
+    const svg = document.querySelector('#diagram-container svg');
+    if (!svg) return;
+    svg.querySelectorAll('[id^="alarm-badge-"]').forEach(el => el.remove());
+    if (!alarms || !alarms.length) return;
+
+    const NS  = 'http://www.w3.org/2000/svg';
+    const inv = svg.getScreenCTM()?.inverse();
+    if (!inv) return;
+
+    const toSVG = (x, y) => {
+        const p = svg.createSVGPoint();
+        p.x = x; p.y = y;
+        return p.matrixTransform(inv);
+    };
+
+    // Normaliza para lista de {element, severity, offset}
+    const resolved = [];
+    alarms.filter(a => a.active).forEach(a => {
+        if (a.element) {
+            // formato direto
+            resolved.push({ element: a.element, severity: a.severity || 'alarm', offset: a.offset });
+        } else {
+            // formato gRPC → lookup no catálogo
+            const entry = ALARM_CATALOG.find(e => e.variable === a.variable);
+            if (entry) resolved.push(entry);
+        }
+    });
+    if (!resolved.length) return;
+
+    resolved.forEach((entry, i) => {
+        const drawable = typeof getDrawablePath === 'function' ? getDrawablePath(entry.element) : null;
+        if (!drawable) { console.warn(`[alarms] drawable not found: ${entry.element}`); return; }
+
+        const r     = drawable.getBoundingClientRect();
+        const tr    = toSVG(r.right, r.top);
+        const bl    = toSVG(r.left,  r.bottom);
+        const below = entry.offset === 'below';
+        const cx    = tr.x + 10;
+        const cy    = below ? bl.y + 10 : tr.y - 10;
+
+        svg.appendChild(_badgeShape(NS, entry, cx, cy, i + 1));
+    });
+}
+
 function updateAlarms(alarms) {
-    // Se vier da planta (gRPC), alarms é um array de objetos
-    // Se vier do CSV, alarms é vazio — mostra placeholder
-    if (!alarms || alarms.length === 0) {
-        // CSV mode: show static alarm names as inactive
-        const names = ALARM_NAMES;
-        const mid = Math.ceil(names.length / 2);
-        $alarmsLeft.innerHTML = names.slice(0, mid).map(n => alarmHtml(n, false)).join('');
-        $alarmsRight.innerHTML = names.slice(mid).map(n => alarmHtml(n, false)).join('');
-        $alarmsPanel.classList.remove('has-alarms');
-        return;
-    }
-
-    const mid = Math.ceil(alarms.length / 2);
-    const hasActive = alarms.some(a => a.active);
-
-    $alarmsLeft.innerHTML = alarms.slice(0, mid).map(a => alarmHtml(a.variable, a.active)).join('');
-    $alarmsRight.innerHTML = alarms.slice(mid).map(a => alarmHtml(a.variable, a.active)).join('');
-
-    if (hasActive) {
-        $alarmsPanel.classList.add('has-alarms');
-    } else {
-        $alarmsPanel.classList.remove('has-alarms');
-    }
+    renderAlarmBadges(alarms);
 }
 
 function alarmHtml(name, active) {

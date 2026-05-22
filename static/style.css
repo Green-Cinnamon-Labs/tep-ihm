@@ -687,7 +687,11 @@ main {
     bottom: 16px;
     right: 16px;
     width: 480px;
-    max-height: 260px;
+    height: 260px;
+    min-width: 280px;
+    min-height: 100px;
+    resize: both;
+    overflow: hidden;
     background: #0e1520;
     border: 1px solid #1e3a5a;
     border-radius: 4px;
@@ -757,6 +761,61 @@ main {
     outline: 2px solid #5a9fd4 !important;
     outline-offset: 1px !important;
 }
+
+/* ── Demo dropdown ───────────────────────────────────────────────────────── */
+
+.demo-dropdown-wrap {
+    position: relative;
+}
+
+.demo-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    min-width: 260px;
+    background: #0e1520;
+    border: 1px solid #1e3a5a;
+    border-radius: 4px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.7);
+    z-index: 1100;
+    overflow: hidden;
+    font-family: 'Consolas', 'Fira Code', 'Courier New', monospace;
+}
+
+.demo-dd-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #1e3a5a;
+    transition: background 0.12s;
+}
+
+.demo-dd-item:last-child {
+    border-bottom: none;
+}
+
+.demo-dd-item:hover {
+    background: #121e30;
+}
+
+.demo-dd-label {
+    color: #8ab4ce;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.demo-dd-desc {
+    color: #4a7aaf;
+    font-size: 10px;
+}
+
+/* log line level colors (LOG / WRN / ERR / INF) */
+.demo-log-line.log-LOG  { color: #8ab4ce; }
+.demo-log-line.log-INF  { color: #64b5f6; }
+.demo-log-line.log-WRN  { color: #ffd54f; }
+.demo-log-line.log-ERR  { color: #ef5350; }
 
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 
