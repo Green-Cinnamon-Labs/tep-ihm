@@ -1,3 +1,21 @@
+/* ── ISA-101 semantic palette ────────────────────────────────────────────── */
+:root {
+    --hmi-bg:       #D9DEE2;
+    --hmi-panel:    #EEF1F3;
+    --hmi-line:     #6F767D;
+    --hmi-text:     #1F252A;
+    --hmi-muted:    #6B7278;
+    --hmi-data:     #263238;
+    --hmi-display:  #1565C0;  /* valores de processo em destaque (azul ISA light) */
+    --hmi-good:     #4B6F44;
+    --hmi-warning:  #B7791F;
+    --hmi-alarm:    #B00020;
+    --hmi-invalid:  #7A3E9D;
+    --hmi-manual:   #1F5F8B;
+    --hmi-selected: #005A9C;
+    --hmi-disabled: #9AA1A6;
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -6,9 +24,12 @@
 
 body {
     font-family: 'Consolas', 'Fira Code', 'Courier New', monospace;
-    background: #0f1117;
-    color: #c0c0c0;
-    min-height: 100vh;
+    background: var(--hmi-bg);
+    color: var(--hmi-text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     font-size: 13px;
 }
 
@@ -19,20 +40,20 @@ header {
     align-items: center;
     gap: 16px;
     padding: 8px 16px;
-    background: #1a1d27;
-    border: 1px solid #2a2d3a;
+    background: #C8D2DA;
+    border: 1px solid #A8B4BE;
     border-radius: 4px;
     margin: 8px;
 }
 
 .header-title {
     font-weight: bold;
-    color: #4fc3f7;
+    color: var(--hmi-display);
     font-size: 14px;
 }
 
 .header-info {
-    color: #999;
+    color: var(--hmi-muted);
 }
 
 .status-tag {
@@ -220,11 +241,13 @@ main {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    flex: 1;
+    min-height: 0;
 }
 
 .panel {
-    background: #1a1d27;
-    border: 1px solid #2a2d3a;
+    background: var(--hmi-panel);
+    border: 1px solid #C0C8D0;
     border-radius: 4px;
     padding: 8px 12px;
 }
@@ -232,12 +255,12 @@ main {
 .panel h2 {
     font-size: 11px;
     font-weight: bold;
-    color: #78909c;
+    color: var(--hmi-muted);
     text-transform: uppercase;
     letter-spacing: 1px;
     margin-bottom: 6px;
     padding-bottom: 4px;
-    border-bottom: 1px solid #2a2d3a;
+    border-bottom: 1px solid #C0C8D0;
 }
 
 .trends-header {
@@ -311,17 +334,18 @@ main {
 }
 
 .kv-table td:first-child {
-    color: #555;
+    color: var(--hmi-muted);
     width: 80px;
 }
 
 .kv-table td:last-child {
     text-align: right;
+    color: var(--hmi-display);
 }
 
-.solver-steady { color: #66bb6a; }
-.solver-slow   { color: #ffa726; }
-.solver-fast   { color: #ef5350; }
+.solver-steady { color: var(--hmi-good); }
+.solver-slow   { color: var(--hmi-warning); }
+.solver-fast   { color: var(--hmi-alarm); }
 
 /* ── Alarms ──────────────────────────────────────────────────────────────── */
 
@@ -355,11 +379,11 @@ main {
 }
 
 .alarm-inactive .alarm-indicator {
-    background: #66bb6a;
+    background: var(--hmi-good);
 }
 
 .alarm-inactive .alarm-label {
-    color: #555;
+    color: var(--hmi-muted);
 }
 
 .alarm-active .alarm-status { color: #ef5350; font-weight: bold; }
@@ -379,22 +403,22 @@ main {
 
 .signal-table thead th {
     text-align: left;
-    color: #fff;
+    color: var(--hmi-text);
     font-weight: bold;
     padding: 3px 6px;
-    border-bottom: 1px solid #2a2d3a;
+    border-bottom: 1px solid #C0C8D0;
 }
 
 .signal-table tbody td {
     padding: 2px 6px;
-    border-bottom: 1px solid #1a1d27;
+    border-bottom: 1px solid #D9DEE2;
 }
 
-.signal-table .tag-xmeas { color: #ffa726; }
-.signal-table .tag-xmv { color: #66bb6a; }
-.signal-table .val { text-align: right; color: #e0e0e0; }
-.signal-table .unit { color: #555; }
-.signal-table .name { color: #78909c; }
+.signal-table .tag-xmeas { color: var(--hmi-warning); }
+.signal-table .tag-xmv { color: var(--hmi-good); }
+.signal-table .val { text-align: right; color: var(--hmi-display); }
+.signal-table .unit { color: var(--hmi-muted); }
+.signal-table .name { color: var(--hmi-data); }
 
 .signal-table-compact {
     font-size: 11px;
@@ -527,6 +551,10 @@ main {
 .panel-diagram {
     display: flex;
     flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    padding: 0;
+    border: none;
 }
 
 .panel-diagram h2 {
@@ -558,10 +586,10 @@ main {
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: 500px;
-    background: #666b7d;
+    background: var(--hmi-bg);
     overflow: auto;
     flex: 1;
+    min-height: 0;
     cursor: grab;
     position: relative;
 }
@@ -575,6 +603,75 @@ main {
     height: auto;
     transform-origin: 0 0;
     transition: none;
+}
+
+/* ── Demo terminal overlay ──────────────────────────────────────────────────── */
+
+.demo-panel {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    width: 480px;
+    max-height: 260px;
+    background: #0a0c10;
+    border: 1px solid #2a5a2a;
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    z-index: 1000;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.6);
+    font-family: 'Consolas', 'Fira Code', 'Courier New', monospace;
+}
+
+.demo-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 10px;
+    background: #0d1f0d;
+    border-bottom: 1px solid #2a5a2a;
+    color: #4caf50;
+    font-size: 11px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    border-radius: 4px 4px 0 0;
+}
+
+.demo-close {
+    background: none;
+    border: none;
+    color: #555;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0 2px;
+}
+
+.demo-close:hover {
+    color: #ef5350;
+}
+
+.demo-log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px 10px;
+    font-size: 11px;
+    line-height: 1.6;
+}
+
+.demo-log-line {
+    color: #66bb6a;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.demo-log-line:last-child {
+    color: #a5d6a7;
+}
+
+.demo-btn-active {
+    background: #4a148c !important;
+    color: #ce93d8 !important;
+    border-color: #7b1fa2 !important;
 }
 
 /* ── Responsive ──────────────────────────────────────────────────────────── */

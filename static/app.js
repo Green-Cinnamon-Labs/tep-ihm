@@ -393,8 +393,8 @@ function update(data) {
     _currentActiveIdv = data.active_idv || [];
     renderIdv(_currentActiveIdv);
 
-    // Diagram animation (P&ID)
-    if (typeof updateDiagram === 'function') {
+    // Diagram animation (P&ID) — suprimido durante demo mode
+    if (typeof updateDiagram === 'function' && !window._demoActive) {
         updateDiagram(xmeas, xmv);
     }
 }

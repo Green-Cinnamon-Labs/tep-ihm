@@ -88,7 +88,7 @@ function getOrCreateValueText(id) {
     textEl.setAttribute('y', bbox.y + bbox.height / 2 + 4);
     textEl.setAttribute('font-size', '10');
     textEl.setAttribute('font-family', 'Consolas, monospace');
-    textEl.setAttribute('fill', '#00e5ff');
+    textEl.style.fill = 'var(--hmi-display)';
     textEl.setAttribute('pointer-events', 'none');
     svg.appendChild(textEl);
     return textEl;

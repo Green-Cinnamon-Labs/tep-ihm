@@ -22,7 +22,18 @@
             <span id="rec-status" class="rec-status">parado</span>
             <span id="rec-timer" class="rec-timer">00:00</span>
         </span>
+        <button id="btn-sim-pause" class="sim-control-btn sim-running" title="Pause simulation">⏸ Pause</button>
+        <button id="btn-demo" class="sim-control-btn" onclick="startDemo()" title="Demonstração visual ISA-101 (sem planta)">▶ Demo</button>
     </header>
+
+    <!-- Demo terminal overlay -->
+    <div id="demo-panel" class="demo-panel" hidden>
+        <div class="demo-panel-header">
+            <span>■ DEMO MODE — valores sintéticos</span>
+            <button onclick="stopDemo()" class="demo-close">✕</button>
+        </div>
+        <div id="demo-log" class="demo-log"></div>
+    </div>
 
     <!-- ISD Banner (hidden by default) -->
     <div id="isd-banner" class="isd-banner" hidden>EMERGENCY SHUTDOWN (ISD)</div>
@@ -47,80 +58,40 @@
             </section>
         </div>
 
-        <!-- Row 2: Diagram (left) + Charts (right) -->
-        <div class="row-diagram-charts">
-            <!-- Left: Process Diagram (P&ID) -->
-            <section class="panel panel-diagram">
-                <h2>Process Diagram (P&ID)</h2>
-                <div id="diagram-container">
-                <!-- SVG injetado via JS a partir de plant-diagram.svg -->
-                </div>
-            </section>
+        <!-- Diagram: full remaining area -->
+        <section class="panel panel-diagram">
+            <div id="diagram-container">
+            <!-- SVG injetado via JS a partir de plant-diagram.svg -->
+            </div>
+        </section>
 
-            <!-- Resizable Divider -->
+        <!-- Hidden panels — mantidos no DOM para não quebrar app.js -->
+        <div hidden>
+            <canvas id="chart-pressure"></canvas>
+            <canvas id="chart-temperature"></canvas>
+            <canvas id="chart-levels"></canvas>
+            <canvas id="chart-flows"></canvas>
+            <table id="xmeas-table"><tbody></tbody></table>
+            <table id="xmv-table"><tbody></tbody></table>
+            <div id="idv-list"></div>
+            <div id="operator-content">
+                <table id="operator-meta-table">
+                    <tr><td></td><td id="op-phase"></td></tr>
+                    <tr><td></td><td id="op-time"></td></tr>
+                    <tr><td></td><td id="op-isd"></td></tr>
+                    <tr><td></td><td id="op-reconcile"></td></tr>
+                    <tr><td></td><td id="op-last-action"></td></tr>
+                </table>
+                <table id="operator-vars-table"><tbody id="op-vars-tbody"></tbody></table>
+            </div>
             <div class="resizable-divider" id="resize-divider"></div>
-
-            <!-- Right: Charts -->
-            <section class="panel panel-charts">
-                <div class="trends-header">
-                    <h2>Trends</h2>
-                    <button id="btn-sim-pause" class="sim-control-btn sim-running" title="Pause simulation">⏸ Pause</button>
-                </div>
-                <div class="chart-grid">
-                    <div class="chart-container"><canvas id="chart-pressure"></canvas></div>
-                    <div class="chart-container"><canvas id="chart-temperature"></canvas></div>
-                    <div class="chart-container"><canvas id="chart-levels"></canvas></div>
-                    <div class="chart-container"><canvas id="chart-flows"></canvas></div>
-                </div>
-            </section>
-        </div>
-
-        <!-- Row 3: 4 painéis lado a lado -->
-        <div class="row-split-4">
-            <section class="panel">
-                <h2>Measurements (XMEAS)</h2>
-                <table id="xmeas-table" class="signal-table signal-table-compact">
-                    <thead><tr><th>Tag</th><th>Value</th><th>Unit</th><th>Name</th></tr></thead>
-                    <tbody></tbody>
-                </table>
-            </section>
-
-            <section class="panel">
-                <h2>Manipulated (XMV)</h2>
-                <table id="xmv-table" class="signal-table signal-table-compact">
-                    <thead><tr><th>Tag</th><th>Value</th><th>Unit</th><th>Name</th></tr></thead>
-                    <tbody></tbody>
-                </table>
-            </section>
-
-            <section class="panel">
-                <h2>Disturbances (IDV)</h2>
-                <div id="idv-list" class="idv-list"></div>
-            </section>
-
-            <section class="panel">
-                <h2>Operator K8s</h2>
-                <div id="operator-content">
-                    <table id="operator-meta-table" class="kv-table">
-                        <tr><td>Phase</td><td id="op-phase">--</td></tr>
-                        <tr><td>Plant Time</td><td id="op-time">--</td></tr>
-                        <tr><td>ISD</td><td id="op-isd">--</td></tr>
-                        <tr><td>Last Reconcile</td><td id="op-reconcile">--</td></tr>
-                        <tr><td>Last Action</td><td id="op-last-action">--</td></tr>
-                    </table>
-                    <h3 class="subpanel-title">Policy Variables</h3>
-                    <table id="operator-vars-table" class="signal-table signal-table-compact">
-                        <thead><tr><th>Name</th><th>XMEAS</th><th>Value</th><th>In Range</th></tr></thead>
-                        <tbody id="op-vars-tbody"></tbody>
-                    </table>
-                </div>
-            </section>
         </div>
     </main>
 
     <script src="/static/diagram-adapter.js"></script>
     <script src="/static/diagram-animator.js"></script>
     <script src="/static/app.js"></script>
+    <script src="/static/demo.js"></script>
 </body>
 </html>
 
