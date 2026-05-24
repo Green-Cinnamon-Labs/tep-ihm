@@ -11,6 +11,10 @@ let _demoStepIndex = 0;
 let _demoCurrent   = null;
 let _demoSteps     = [];
 
+let _flowHighlightStreams   = [];
+let _flowHighlightActuators = [];
+let _flowHighlightUnits     = [];
+
 // ── Valores nominais TEP ──────────────────────────────────────────────────────
 
 function _nominalXmeas() {
@@ -41,14 +45,14 @@ function _demoLog(msg, level) {
 
 const _TOUR_ELEMENTS = [
     {
-        element: 'unit-compressor-1',
+        element: 'unit-compressor-3',
         label:   'Compressor',
         tep:     'XMEAS(20) — Trabalho do compressor de reciclo [kW]. Nominal ~341 kW. ' +
                  'Reflete carga do loop de reciclo. Excesso indica restrição ou sobrecarga. Hi: 400 kW · Hi-Hi: 450 kW.',
     },
     {
-        element: 'unit-reactor',
-        label:   'Reactor',
+        element: 'sensor-xmeas-09',
+        label:   'Reactor Temperature (TI)',
         tep:     'XMEAS(9) — Temperatura do reator CSTR [°C]. Nominal ~122.9°C. ' +
                  'Controlada por água de resfriamento (CW). Reação exotérmica: aumento indica perda de controle térmico. Hi: 150°C · Hi-Hi: 165°C.',
     },
@@ -62,11 +66,12 @@ const _TOUR_ELEMENTS = [
         element: 'sensor-xmeas-08',
         label:   'Reactor Level (LI)',
         tep:     'XMEAS(8) — Nível do reator [%]. Nominal ~75%. ' +
-                 'Controlado pela vazão de produto (XMV 10). Nível alto = reator cheio; baixo = cavitação do agitador.',
+                'Não há pareamento canônico direto com uma válvula de nível no artigo. ' +
+                'É uma variável crítica monitorada por limites operacionais/shutdown; varia indiretamente com feeds, reciclo, pressão, temperatura e dinâmica de reação.'
     },
     {
-        element: 'unit-separator',
-        label:   'Separator',
+        element: 'sensor-xmeas-11',
+        label:   'Separator Temperature (TI)',
         tep:     'XMEAS(11) — Temperatura do separador vapor-líquido [°C]. Nominal ~80°C. ' +
                  'Alta temperatura indica condensação insuficiente ou excesso de calor no reciclo. Hi: 100°C · Hi-Hi: 115°C.',
     },
@@ -74,17 +79,19 @@ const _TOUR_ELEMENTS = [
         element: 'sensor-xmeas-12',
         label:   'Separator Level (LI)',
         tep:     'XMEAS(12) — Nível do separador [%]. Nominal ~50%. ' +
-                 'Controlado pela válvula de saída de líquido (XMV 11). Nível alto = inundação; baixo = arrastamento de líquido.',
+                'Controlado principalmente pela saída líquida do separador para o stripper (XMV(7), stream 10). ' +
+                'Nível alto indica acúmulo/inundação; nível baixo pode indicar esvaziamento do vaso e risco de arraste/intermitência.'
     },
     {
-        element: 'unit-condenser',
-        label:   'Condenser',
-        tep:     'XMEAS(22) — Temperatura de saída do condensador [°C]. Nominal ~13.8°C. ' +
-                 'Resfria o vapor do reator. Alta temperatura reduz eficiência de separação. Hi: 55°C · Hi-Hi: 65°C.',
+        element: 'sensor-xmeas-22',
+        label:   'Condenser Temperature (TI)',
+        tep:     'XMEAS(22) — Temperatura de saída da água de resfriamento do condensador [°C]. Nominal ~77.3°C. ' +
+                'O condensador remove calor do vapor vindo do reator antes do separador. ' +
+                'Temperatura alta na saída da água indica maior carga térmica ou menor capacidade de resfriamento, podendo reduzir a condensação e afetar o separador.'
     },
     {
-        element: 'unit-stripper',
-        label:   'Stripper',
+        element: 'sensor-xmeas-18',
+        label:   'Stripper Temperature (TI)',
         tep:     'XMEAS(18) — Temperatura do stripper [°C]. Nominal ~65.7°C. ' +
                  'Coluna de stripping que remove produtos leves do líquido. Aquecida pelo boiler (steam). Hi: 80°C · Hi-Hi: 90°C.',
     },
@@ -92,7 +99,8 @@ const _TOUR_ELEMENTS = [
         element: 'sensor-xmeas-15',
         label:   'Stripper Level (LI)',
         tep:     'XMEAS(15) — Nível do stripper [%]. Nominal ~50%. ' +
-                 'Controlado pela válvula de saída de produto (XMV 12). Desvio indica desbalanço de massa na coluna.',
+                'Controlado principalmente pela saída de produto líquido do stripper (XMV(8), stream 11). ' +
+                'Desvio indica desbalanço de massa na coluna; nível alto sugere acúmulo, nível baixo sugere esvaziamento do fundo.'
     },
 ];
 
@@ -147,6 +155,150 @@ function _buildAlarmTourSteps() {
     return steps;
 }
 
+// ── Flow Path Tour — helpers ──────────────────────────────────────────────────
+
+function setDemoStreamIntensity(prefix, t) {
+    const w      = (1.5 + t * 6).toFixed(2);
+    const light  = Math.round(45 + t * 45);       // 45% (dim) → 90% (bright)
+    const stroke = `hsl(210, 55%, ${light}%)`;
+    const opacity = (0.15 + t * 0.85).toFixed(2);
+    document.querySelectorAll(`[data-cell-id^="${prefix}"]`).forEach(seg => {
+        const path = seg.querySelector('path');
+        if (!path) return;
+        path.setAttribute('stroke-width', w);
+        path.style.stroke  = stroke;
+        path.style.opacity = opacity;
+    });
+}
+
+function setDemoActuatorOpening(id, opening) {
+    if (typeof updateActuator === 'function') updateActuator(id, opening);
+}
+
+function highlightDemoUnit(id, active) {
+    const el = document.querySelector(`[data-cell-id="${id}"]`);
+    if (!el) return;
+    el.querySelectorAll('path, ellipse, rect').forEach(shape => {
+        shape.style.fill        = active ? 'hsl(210, 50%, 42%)' : '#6F767D';
+        shape.style.fillOpacity = active ? '0.45' : '0.20';
+    });
+}
+
+function clearDemoFlowHighlights() {
+    // Reseta streams que podem não estar no updateDiagram padrão (stream-05, stream-08.1, stream-15)
+    _flowHighlightStreams.forEach(prefix => setDemoStreamIntensity(prefix, 0));
+    // Reseta atuadores para abertura neutra (50%)
+    _flowHighlightActuators.forEach(id => setDemoActuatorOpening(id, 50));
+    _flowHighlightUnits.forEach(id => highlightDemoUnit(id, false));
+    _flowHighlightStreams    = [];
+    _flowHighlightActuators = [];
+    _flowHighlightUnits     = [];
+}
+
+function applyDemoFlowHighlight({ streams = [], actuators = [], units = [], flowLevel = 1, valveOpening = 100, clear = false }) {
+    if (clear) clearDemoFlowHighlights();
+    _flowHighlightStreams    = streams;
+    _flowHighlightActuators = actuators;
+    _flowHighlightUnits     = units;
+    streams.forEach(prefix => setDemoStreamIntensity(prefix, flowLevel));
+    actuators.forEach(id   => setDemoActuatorOpening(id, valveOpening));
+    units.forEach(id       => highlightDemoUnit(id, true));
+}
+
+function _flowRamp(streams, actuators, units) {
+    return [0, 0.25, 0.5, 0.75, 1.0].map((t, i) => ({
+        delay:     i === 0 ? 650 : 450,
+        msg:       null,
+        patch:     {},
+        highlight: { streams, actuators, units, flowLevel: t, valveOpening: Math.round(t * 100) },
+        _ramp:     true,
+    }));
+}
+
+function _flowGroup(header, detail, streams, actuators, units) {
+    return [
+        { delay: 1300, msg: `━━ ${header} ━━`, patch: {}, highlight: { streams, actuators, units, flowLevel: 0, valveOpening: 0, clear: true }, _info: true },
+        { delay: 500,  msg: detail,            patch: {}, highlight: { streams, actuators, units, flowLevel: 0, valveOpening: 0 }, _ramp: true, _info: true },
+        ..._flowRamp(streams, actuators, units),
+        { delay: 2800, msg: null, patch: {}, highlight: { streams, actuators, units, flowLevel: 1, valveOpening: 100 }, _ramp: true },
+    ];
+}
+
+// ── Flow Path Tour — steps ────────────────────────────────────────────────────
+
+function _buildFlowPathTourSteps() {
+    const steps = [
+        { delay: 0, msg: '▶  Tour pelos caminhos de fluxo — 7 grupos · feeds → reator → separação → reciclo → produto → utilidades', patch: {}, highlight: { streams: [], actuators: [], units: [], flowLevel: 0, clear: true }, _info: true },
+    ];
+
+    steps.push(..._flowGroup(
+        'FEEDS DE MATÉRIA-PRIMA',
+        'A (XMV-3), D (XMV-1), E (XMV-2), A/C (XMV-4) entram no Feed Mixer.',
+        ['stream-01-', 'stream-02-', 'stream-03-', 'stream-04-'],
+        ['actuator-xmv-01', 'actuator-xmv-02', 'actuator-xmv-03', 'actuator-xmv-04'],
+        ['node-reactor-feed-mixer'],
+    ));
+
+    steps.push(..._flowGroup(
+        'ALIMENTAÇÃO DO REATOR',
+        'Fluxo total do mixer + reciclo do stripper → reator CSTR.',
+        ['stream-05-', 'stream-06-'],
+        [],
+        ['unit-reactor'],
+    ));
+
+    steps.push(..._flowGroup(
+        'PRODUTO DO REATOR',
+        'Efluente do reator → condensador → separador vapor/líquido.',
+        ['stream-07-'],
+        [],
+        ['unit-condenser', 'unit-separator'],
+    ));
+
+    steps.push(..._flowGroup(
+        'RECICLO DE VAPOR',
+        'Vapor do separador → compressores → reciclo ao reator. XMV-5: bypass do compressor.',
+        ['stream-08-', 'stream-08.1-'],
+        ['actuator-xmv-05'],
+        ['unit-compressor-1', 'unit-compressor-2', 'unit-compressor-3'],
+    ));
+
+    steps.push(..._flowGroup(
+        'PURGA',
+        'XMV-6 remove inertes acumulados no loop de reciclo — sem purga, o sistema fica saturado.',
+        ['stream-09-'],
+        ['actuator-xmv-06'],
+        [],
+    ));
+
+    steps.push(..._flowGroup(
+        'CAMINHO LÍQUIDO — PRODUTO FINAL',
+        'Separador underflow (XMV-7) → stripper → produto final (XMV-8).',
+        ['stream-10-', 'stream-11-'],
+        ['actuator-xmv-07', 'actuator-xmv-08'],
+        ['unit-stripper'],
+    ));
+
+    steps.push(..._flowGroup(
+        'ÁGUA DE RESFRIAMENTO (CWS)',
+        'CWS reator (XMV-10) e condensador (XMV-11) — retirada de calor nos dois equipamentos.',
+        ['stream-12-', 'stream-13-'],
+        ['actuator-xmv-10', 'actuator-xmv-11'],
+        [],
+    ));
+
+    steps.push(..._flowGroup(
+        'VAPOR — REBOILER DO STRIPPER',
+        'XMV-9 fornece vapor ao reboiler do stripper para controlar a temperatura da coluna.',
+        ['stream-14-', 'stream-15-'],
+        ['actuator-xmv-09'],
+        ['unit-stripper-boiler'],
+    ));
+
+    steps.push({ delay: 1500, msg: '✅ Tour concluído — todos os caminhos de fluxo visitados.', patch: {}, highlight: { streams: [], actuators: [], units: [], flowLevel: 0, clear: true }, final: true, _info: true });
+    return steps;
+}
+
 // ── Registry de demos ─────────────────────────────────────────────────────────
 
 const DEMO_REGISTRY = [
@@ -156,7 +308,12 @@ const DEMO_REGISTRY = [
         desc:  'Visita todos os elementos do diagrama exibindo as 3 severidades ISA-101.',
         build: _buildAlarmTourSteps,
     },
-    // Novas demos podem ser adicionadas aqui
+    {
+        id:    'flow-path-tour',
+        label: '🌊 Tour pelos fluxos',
+        desc:  '7 grupos de fluxo: feeds → reator → separação → reciclo → purga → produto → utilidades.',
+        build: _buildFlowPathTourSteps,
+    },
 ];
 
 // ── Dropdown ──────────────────────────────────────────────────────────────────
@@ -216,6 +373,7 @@ function stopDemo() {
     if (_demoTimerId) { clearTimeout(_demoTimerId); _demoTimerId = null; }
     _demoSteps = [];
 
+    clearDemoFlowHighlights();
     if (typeof updateAlarms === 'function') updateAlarms([]);
 
     const btn = document.getElementById('btn-demo');
@@ -236,14 +394,18 @@ function _runDemoStep() {
             _demoCurrent.xmeas[parseInt(idx)] = val;
         });
 
-        const level = step._info ? 'INF' : 'LOG';
-        _demoLog(step.msg, level);
+        if (step.msg) {
+            const level = step._info ? 'INF' : 'LOG';
+            _demoLog(step.msg, level);
+        }
 
-        if (typeof updateDiagram === 'function') {
+        if (!step._ramp && typeof updateDiagram === 'function') {
             updateDiagram([..._demoCurrent.xmeas], [..._demoCurrent.xmv]);
         }
 
-        if (typeof updateAlarms === 'function') {
+        if (step.highlight !== undefined) {
+            applyDemoFlowHighlight(step.highlight);
+        } else if (typeof updateAlarms === 'function') {
             updateAlarms(step.directAlarms !== undefined
                 ? step.directAlarms
                 : _deriveDemoAlarms(_demoCurrent.xmeas));

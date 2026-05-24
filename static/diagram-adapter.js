@@ -66,26 +66,94 @@ function getStreamLine(id) {
     return tg.querySelector('path');  // primeiro path = linha do stream
 }
 
+// Posicionamento por sensor/actuator.
+// placement: 'right' (padrão) | 'left' | 'above' | 'below'
+// offset: afastamento extra em pixels de tela (positivo = para fora do sensor)
+const SENSOR_TEXT_POSITION = {
+    'sensor-xmeas-01': { placement: 'left', offset: 5  },
+    'sensor-xmeas-02': { placement: 'left', offset: 5  },
+    'sensor-xmeas-03': { placement: 'left', offset: 5  },
+    'sensor-xmeas-04': { placement: 'left', offset: 5  },
+    'sensor-xmeas-05': { placement: 'above', offset: 5  },
+    'sensor-xmeas-06': { placement: 'above', offset: 10  },
+    'sensor-xmeas-14': { placement: 'above', offset: 5  },
+    'sensor-xmeas-15': { placement: 'right', offset: 5  },
+    'actuator-xmv-01': { placement: 'below', offset: 0  },
+    'actuator-xmv-02': { placement: 'below', offset: 0  },
+    'actuator-xmv-03': { placement: 'below', offset: 0  },
+    'actuator-xmv-04': { placement: 'below', offset: 0  },
+    'actuator-xmv-05': { placement: 'above', offset: 5  },
+    'actuator-xmv-06': { placement: 'below', offset: 0  },
+    'actuator-xmv-07': { placement: 'below', offset: 0  },
+    'actuator-xmv-08': { placement: 'below', offset: 0  },
+    'actuator-xmv-09': { placement: 'below', offset: 0  },
+    'actuator-xmv-10': { placement: 'below', offset: 0  },
+    'actuator-xmv-11': { placement: 'below', offset: 0  },
+    'actuator-xmv-12': { placement: 'above', offset: 5  },
+    // Analisador de feed — posicionado à esquerda do bloco
+    'sensor-xmeas-23': { placement: 'left' },
+    'sensor-xmeas-24': { placement: 'left' },
+    'sensor-xmeas-25': { placement: 'left' },
+    'sensor-xmeas-26': { placement: 'left' },
+    'sensor-xmeas-27': { placement: 'left' },
+    'sensor-xmeas-28': { placement: 'left' },
+};
+
 /**
  * Retorna ou cria um nó <text> SVG para exibir valores ao lado de um elemento.
  * O texto é posicionado com base no bounding box do elemento gráfico.
  */
 function getOrCreateValueText(id) {
-    const svg = document.querySelector('#tep-diagram svg, svg#tep-diagram, svg');
+    const svg = document.querySelector('#diagram-container svg');
     if (!svg) return null;
 
     const existingId = `val-${id}`;
-    let textEl = svg.getElementById(existingId);
+    let textEl = document.getElementById(existingId);
     if (textEl) return textEl;
 
-    const drawable = getDrawablePath(id);
-    if (!drawable) return null;
+    const wrapper = getSemanticElement(id);
+    if (!wrapper) return null;
 
-    const bbox = drawable.getBBox();
+    // Sensores: usa a ellipse (evita pegar a linha tracejada que vem antes no DOM)
+    // Atuadores/outros: usa o wrapper inteiro (haste da válvula tem width≈0)
+    const ellipse = wrapper.querySelector('ellipse');
+    const er = ellipse
+        ? ellipse.getBoundingClientRect()
+        : wrapper.getBoundingClientRect();
+    if (!er.width && !er.height) return null;
+
+    // Converte coordenadas de tela para espaço do SVG raiz
+    const pt = svg.createSVGPoint();
+    const ctm = svg.getScreenCTM().inverse();
+
+    const cfg       = SENSOR_TEXT_POSITION[id] || {};
+    const placement = cfg.placement || 'right';
+    const offset    = cfg.offset    || 0;
+
+    switch (placement) {
+        case 'above':
+            pt.x = er.left + er.width / 2;
+            pt.y = er.top  - 4 - offset;
+            break;
+        case 'below':
+            pt.x = er.left   + er.width  / 2;
+            pt.y = er.bottom + 12 + offset;
+            break;
+        case 'left':
+            pt.x = er.left - 4 - offset;
+            pt.y = er.top  + er.height / 2;
+            break;
+        default: // right
+            pt.x = er.right + 4 + offset;
+            pt.y = er.top   + er.height / 2;
+    }
+    const pos = pt.matrixTransform(ctm);
+
     textEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
     textEl.setAttribute('id', existingId);
-    textEl.setAttribute('x', bbox.x + bbox.width + 4);
-    textEl.setAttribute('y', bbox.y + bbox.height / 2 + 4);
+    textEl.setAttribute('x', pos.x);
+    textEl.setAttribute('y', pos.y + 4);
+    textEl.setAttribute('text-anchor', placement === 'above' || placement === 'below' ? 'middle' : placement === 'left' ? 'end' : 'start');
     textEl.setAttribute('font-size', '10');
     textEl.setAttribute('font-family', 'Consolas, monospace');
     textEl.style.fill = 'var(--hmi-display)';
@@ -116,6 +184,11 @@ function updateStream(id, value, maxValue = 60) {
 /**
  * Atualiza visualmente um atuador (válvula).
  *   value — posição da válvula 0..100 (XMV em %)
+ *
+ * ISA-101 §7: cor reservada para estado anormal.
+ * Válvulas usam degradê de tons de fundo em passos de 10%:
+ *   fechada (0%)  → cinza escuro   hsl(210, 12%, 28%)
+ *   aberta (100%) → cinza claro    hsl(210, 18%, 82%)
  */
 function updateActuator(id, value) {
     const wrapper = getSemanticElement(id);
@@ -124,17 +197,17 @@ function updateActuator(id, value) {
     const tg = wrapper.querySelector(':scope > g[transform]');
     if (!tg) return;
 
-    // Aplica cor em todos os paths exceto o primeiro (linha de haste)
-    const paths = tg.querySelectorAll('path');
-    const color = value < 5   ? '#546e7a'   // fechada → cinza
-                : value < 40  ? '#ef5350'   // quase fechada → vermelho
-                : value < 80  ? '#ffa726'   // parcial → laranja
-                :               '#66bb6a';  // aberta → verde
+    // Snap para o múltiplo de 10 mais próximo → 11 tons discretos visíveis
+    const step      = Math.round(Math.max(0, Math.min(100, value)) / 10) * 10;
+    const t         = step / 100;
+    const lightness = Math.round(28 + t * 67);   // 28% (fechada) → 95% (aberta ≈ branco)
+    const color     = `hsl(210, 10%, ${lightness}%)`;
 
+    const paths = tg.querySelectorAll('path');
     paths.forEach((p, i) => {
         if (i === 0) return;  // linha de haste — não colorir
-        p.style.fill = color;
-        p.style.fillOpacity = '0.85';
+        p.style.fill        = color;
+        p.style.fillOpacity = '1';
     });
 }
 

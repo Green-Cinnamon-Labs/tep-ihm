@@ -517,7 +517,7 @@ function _badgeShape(NS, entry, cx, cy, n) {
     g.setAttribute('id', `alarm-badge-${n}`);
     g.setAttribute('pointer-events', 'none');
 
-    const S    = 24;
+    const S    = 32;
     const href = _SEV_ICON[entry.severity] || _SEV_ICON.alarm;
 
     const img = document.createElementNS(NS, 'image');

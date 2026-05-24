@@ -201,97 +201,39 @@ function scaleStreamWidth(flowValue, maxFlow = 60) {
     return 1.5 + normalized * 2.5;
 }
 
-function updateStreamWidth(streamId, flowValue, maxFlow = 60) {
-    const stream = document.querySelector(`[data-cell-id="${streamId}"]`);
-    if (!stream) return;
-    const path = stream.querySelector('path');
-    if (!path) return;
-    path.setAttribute('stroke-width', scaleStreamWidth(flowValue, maxFlow).toFixed(2));
-    path.style.opacity = flowValue < 0.5 ? '0.3' : '0.85';
+function updateStreamGroup(prefix, flowValue, maxFlow = 60) {
+    const t         = Math.max(0, Math.min(1, flowValue / maxFlow));
+    const w         = scaleStreamWidth(flowValue, maxFlow).toFixed(2);
+    const lightness = Math.round(28 + t * 67);   // 28% (sem fluxo) → 95% (fluxo máximo)
+    const stroke    = `hsl(210, 10%, ${lightness}%)`;
+    const opacity   = flowValue < 0.5 ? '0.4' : '1';
+    document.querySelectorAll(`[data-cell-id^="${prefix}"]`).forEach(seg => {
+        const path = seg.querySelector('path');
+        if (!path) return;
+        path.setAttribute('stroke-width', w);
+        path.style.stroke  = stroke;
+        path.style.opacity = opacity;
+    });
 }
 
 // ── Sensor value display ──────────────────────────────────────────────────────
 // Delega para getOrCreateValueText (diagram-adapter.js) que cria label flutuante.
 // Draw.io não exporta .sensor-value como classe CSS — não confiar em querySelector de classe.
 
+function _idToTag(id) {
+    const xm = id.match(/sensor-xmeas-0*(\d+)/);
+    if (xm) return `XMEAS(${parseInt(xm[1])})`;
+    const xv = id.match(/actuator-xmv-0*(\d+)/);
+    if (xv) return `XMV(${parseInt(xv[1])})`;
+    return '';
+}
+
 function updateSensorValue(sensorId, value, unit = '') {
     const textEl = getOrCreateValueText(sensorId);
     if (!textEl) return;
-    textEl.textContent = `${value.toFixed(1)}${unit ? ' ' + unit : ''}`;
-}
-
-// ── Analyzer composition display ──────────────────────────────────────────────
-// Mapeamento hardcoded porque o draw.io não exporta data-xmeas-range como atributo SVG.
-// Índices são 0-based (XMEAS(23) = xmeas[22]).
-
-// Cada analisador tem sensores individuais sensor-xmeas-NN no SVG.
-// side: 'left'  → texto à esquerda do wrapper do sensor
-//        'right' → texto à direita do wrapper do sensor
-//
-// Usa getBoundingClientRect() para posicionamento correto independente
-// de transforms aninhados do draw.io — evita mismatch de coordenadas locais vs root SVG.
-const ANALYZER_CONFIG = {
-    'analyzer-06-feed':    { xmeas_start: 36, xmeas_end: 41, side: 'left'  },
-    'analyzer-09-purge':   { xmeas_start: 23, xmeas_end: 30, side: 'right' },
-    'analyzer-11-product': { xmeas_start: 31, xmeas_end: 35, side: 'right' },
-};
-
-function _screenToSVG(svg, screenX, screenY) {
-    const pt = svg.createSVGPoint();
-    pt.x = screenX;
-    pt.y = screenY;
-    return pt.matrixTransform(svg.getScreenCTM().inverse());
-}
-
-function getOrCreateAnalyzerText(sensorId, side) {
-    const existingId = `val-${sensorId}`;
-    let textEl = document.getElementById(existingId);
-    if (textEl) return textEl;
-
-    const svg = document.querySelector('#diagram-container svg');
-    if (!svg || !svg.viewBox.baseVal.width) return null;
-
-    // Usa o drawable (ellipse real) em vez do wrapper <g> para evitar que a
-    // bounding rect inclua a linha tracejada ou label interno do draw.io.
-    const drawable = getDrawablePath(sensorId);
-    if (!drawable) return null;
-
-    const er = drawable.getBoundingClientRect();
-    if (!er.width) return null;   // ainda não renderizado
-
-    const midY  = er.top  + er.height / 2;
-    const left  = _screenToSVG(svg, er.left,  midY);
-    const right = _screenToSVG(svg, er.right, midY);
-
-    textEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    textEl.setAttribute('id', existingId);
-    textEl.setAttribute('y', left.y + 4);
-    textEl.setAttribute('font-size', '9');
-    textEl.setAttribute('font-family', 'Consolas, monospace');
-    textEl.style.fill = 'var(--hmi-display)';
-    textEl.setAttribute('pointer-events', 'none');
-
-    if (side === 'left') {
-        textEl.setAttribute('x', left.x - 20);
-        textEl.setAttribute('text-anchor', 'end');
-    } else {
-        textEl.setAttribute('x', right.x + 20);
-        textEl.setAttribute('text-anchor', 'start');
-    }
-
-    svg.appendChild(textEl);
-    return textEl;
-}
-
-function updateAnalyzerDisplay(analyzerId, xmeasValues) {
-    const cfg = ANALYZER_CONFIG[analyzerId];
-    if (!cfg) return;
-    for (let n = cfg.xmeas_start; n <= cfg.xmeas_end; n++) {
-        const value = xmeasValues[n - 1];
-        if (value == null) continue;
-        const textEl = getOrCreateAnalyzerText(`sensor-xmeas-${n}`, cfg.side);
-        if (textEl) textEl.textContent = `${value.toFixed(1)}%`;
-    }
+    const tag = _idToTag(sensorId);
+    const val = `${value.toFixed(1)}${unit ? ' ' + unit : ''}`;
+    textEl.textContent = tag ? `${tag}  ${val}` : val;
 }
 
 // ── Main update function ──────────────────────────────────────────────────────
@@ -311,21 +253,22 @@ function updateDiagram(xmeas, xmv) {
     colorizeVessel('unit-compressor-2');
     colorizeVessel('unit-compressor-3');
 
-    // Streams de processo — largura proporcional à vazão
-    updateStreamWidth('stream-01-a-feed-down', xmeas[0]);     // XMEAS(1)  A feed
-    updateStreamWidth('stream-02-d-feed-down', xmeas[1]);     // XMEAS(2)  D feed
-    updateStreamWidth('stream-03-e-feed-down', xmeas[2]);     // XMEAS(3)  E feed
-    updateStreamWidth('stream-04-c-feed-down', xmeas[3]);     // XMEAS(4)  A/C feed
-    updateStreamWidth('stream-06-mixer-reactor', xmeas[5]);   // XMEAS(6)  reactor feed total
-    updateStreamWidth('stream-08-down',          xmeas[4]);   // XMEAS(5)  reciclo
-    updateStreamWidth('stream-09-purge',         xmeas[9]);   // XMEAS(10) purga
-    updateStreamWidth('stream-10-in',            xmeas[13]);  // XMEAS(14) sep underflow
-    updateStreamWidth('stream-11-product',       xmeas[16]);  // XMEAS(17) produto
-
-    // Streams de utilidade
-    updateStreamWidth('stream-cws-reactor-in',   xmeas[20], 200); // XMEAS(21) — escala diferente
-    updateStreamWidth('stream-cws-condenser-in', xmeas[21], 200); // XMEAS(22)
-    updateStreamWidth('stream-stm-boiler-in',    xmeas[18], 500); // XMEAS(19) kg/hr
+    // Streams — todos os segmentos do mesmo stream recebem a mesma largura (prefix match)
+    updateStreamGroup('stream-01-', xmeas[0],   1    );  // XMEAS(1)  A feed kscmh
+    updateStreamGroup('stream-02-', xmeas[1],   6000 );  // XMEAS(2)  D feed kg/hr
+    updateStreamGroup('stream-03-', xmeas[2],   7000 );  // XMEAS(3)  E feed kg/hr
+    updateStreamGroup('stream-04-', xmeas[3],   15   );  // XMEAS(4)  A/C feed kscmh
+    updateStreamGroup('stream-06-', xmeas[5],   80   );  // XMEAS(6)  reactor feed kscmh
+    updateStreamGroup('stream-07-', xmeas[5],   80   );  // proxy XMEAS(6) — sem medição própria
+    updateStreamGroup('stream-08-', xmeas[4],   60   );  // XMEAS(5)  reciclo kscmh
+    updateStreamGroup('stream-09-', xmeas[9],   1    );  // XMEAS(10) purga kscmh
+    updateStreamGroup('stream-10-', xmeas[13],  40   );  // XMEAS(14) sep underflow m³/hr
+    updateStreamGroup('stream-11-', xmeas[16],  80   );  // XMEAS(17) produto m³/hr
+    updateStreamGroup('stream-12-', xmv[9],     100  );  // XMV(10)   CWS reator %
+    updateStreamGroup('stream-13-', xmv[10],    100  );  // XMV(11)   CWS condensador %
+    updateStreamGroup('stream-14-', xmeas[18],  500  );  // XMEAS(19) vapor stripper kg/hr
+    // stream-08.1 bypass: espessura fixa (sem medição independente do reciclo principal)
+    // stream-05, stream-15: sem sensor de fluxo — espessura fixa pelo draw.io
 
     // Sensores XMEAS(1..22) — cria label flutuante via getOrCreateValueText
     updateSensorValue('sensor-xmeas-01', xmeas[0],  'kscmh');
@@ -351,15 +294,18 @@ function updateDiagram(xmeas, xmv) {
     updateSensorValue('sensor-xmeas-21', xmeas[20], '°C');
     updateSensorValue('sensor-xmeas-22', xmeas[21], '°C');
 
-    // Atuadores XMV(1..12) — usa updateActuator do diagram-adapter.js
+    // Atuadores XMV(1..12) — cor + valor numérico
     for (let i = 1; i <= 12; i++) {
-        updateActuator(`actuator-xmv-${String(i).padStart(2, '0')}`, xmv[i - 1]);
+        const id = `actuator-xmv-${String(i).padStart(2, '0')}`;
+        updateActuator(id, xmv[i - 1]);
+        updateSensorValue(id, xmv[i - 1], '%');
     }
 
     // Analisadores de composição XMEAS(23..41)
-    updateAnalyzerDisplay('analyzer-06-feed',    xmeas);
-    updateAnalyzerDisplay('analyzer-09-purge',   xmeas);
-    updateAnalyzerDisplay('analyzer-11-product', xmeas);
+    for (let n = 23; n <= 41; n++) {
+        if (xmeas[n - 1] == null) continue;
+        updateSensorValue(`sensor-xmeas-${n}`, xmeas[n - 1], '%');
+    }
 }
 
 // ── Initialization ────────────────────────────────────────────────────────────
