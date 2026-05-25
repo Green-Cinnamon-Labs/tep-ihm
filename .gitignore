@@ -1,6 +1,9 @@
 # Generated gRPC stubs (regenerate with: python -m grpc_tools.protoc ...)
 gen/
 
+# Dados de simulação — SQLite, CSV e qualquer arquivo gerado em runtime
+data/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

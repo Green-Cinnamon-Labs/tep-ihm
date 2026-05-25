@@ -13,10 +13,14 @@ import sys
 import os
 from pathlib import Path
 from contextlib import asynccontextmanager
+from typing import Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import persistence
 
 
 PLANT_ADDRESS = os.environ.get("PLANT_ADDRESS", "localhost:50051")
@@ -96,6 +100,7 @@ async def broadcast(snapshot: dict):
     snapshot["active_idv"] = ACTIVE_IDV
     latest_snapshot = snapshot
     _append_row(snapshot)
+    persistence.maybe_append(snapshot)
     msg = json.dumps(snapshot)
     disconnected = set()
     for ws in connected_clients:
@@ -306,6 +311,17 @@ async def operator_watch_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print(f"[ihm] gravação CSV disponível: {RECORD_CSV_PATH} (aguardando /recording/start)")
+    _default_db = str(Path(__file__).resolve().parent.parent / "data" / "sessions.db")
+    db_path = os.environ.get("SQLITE_DB_PATH", _default_db)
+    persistence.init_db(db_path)
+    source_type = "csv_replay" if CSV_REPLAY else "grpc"
+    address = CSV_REPLAY if CSV_REPLAY else PLANT_ADDRESS
+    persistence.get_or_create_data_source(
+        name=f"TEP Plant ({source_type})",
+        source_type=source_type,
+        address=address,
+    )
+    print(f"[ihm] SQLite persistence: {db_path}")
     tasks = []
     if CSV_REPLAY:
         tasks.append(asyncio.create_task(csv_replay_loop()))
@@ -317,6 +333,7 @@ async def lifespan(app: FastAPI):
     for t in tasks:
         t.cancel()
     _close_csv()
+    persistence.stop_session()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -446,6 +463,92 @@ async def update_disturbances(payload: dict):
     except Exception as e:
         print(f"[ihm] erro ao atualizar distúrbios: {e}")
         return Response(f"Erro: {e}", status_code=400, media_type="text/plain")
+
+
+@app.get("/analytics")
+async def analytics_page():
+    return FileResponse(str(static_dir / "analytics.html"))
+
+
+# ── Capture session API ───────────────────────────────────────────────────────
+
+@app.get("/api/capture/status")
+async def capture_status():
+    sid = persistence.active_session_id()
+    if sid is None:
+        return {"active": False, "session_id": None}
+    session = persistence.get_session(sid)
+    return {"active": True, "session_id": sid, "session": session}
+
+
+@app.post("/api/capture/start")
+async def capture_start(payload: dict):
+    name = (payload.get("name") or "").strip()
+    if not name:
+        return Response("name is required", status_code=400, media_type="text/plain")
+    description = (payload.get("description") or "").strip()
+    if persistence.active_session_id() is not None:
+        return Response("a capture session is already active", status_code=409, media_type="text/plain")
+    sid = persistence.start_session(name, description)
+    print(f"[ihm] capture session started: {sid} — '{name}'")
+    return {"status": "ok", "session_id": sid}
+
+
+@app.post("/api/capture/stop")
+async def capture_stop():
+    sid = persistence.stop_session()
+    if sid is None:
+        return Response("no active session", status_code=404, media_type="text/plain")
+    print(f"[ihm] capture session stopped: {sid}")
+    return {"status": "ok", "session_id": sid}
+
+
+@app.get("/api/sessions")
+async def sessions_list():
+    return persistence.list_sessions()
+
+
+@app.get("/api/sessions/{session_id}")
+async def session_get(session_id: int):
+    s = persistence.get_session(session_id)
+    if s is None:
+        return Response("not found", status_code=404, media_type="text/plain")
+    return s
+
+
+@app.get("/api/history")
+async def history_query(
+    session_id: int,
+    vars: str = "",
+    from_th: Optional[float] = None,
+    to_th: Optional[float] = None,
+):
+    var_keys = [v.strip() for v in vars.split(",") if v.strip()] if vars else []
+    if not var_keys:
+        return Response("vars param required (e.g. vars=xmeas_7,xmv_10)", status_code=400, media_type="text/plain")
+    data = persistence.query_history(session_id, var_keys, from_th, to_th)
+    return data
+
+
+@app.get("/api/sessions/{session_id}/export")
+async def session_export(session_id: int):
+    s = persistence.get_session(session_id)
+    if s is None:
+        return Response("not found", status_code=404, media_type="text/plain")
+    csv_str = persistence.export_csv_str(session_id)
+    filename = f"tep_session_{session_id}.csv"
+    return Response(
+        content=csv_str,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.delete("/api/sessions/{session_id}")
+async def session_delete(session_id: int):
+    if not persistence.delete_session(session_id):
+        return Response("not found", status_code=404, media_type="text/plain")
+    return {"status": "ok", "session_id": session_id}
 
 
 @app.websocket("/ws")
