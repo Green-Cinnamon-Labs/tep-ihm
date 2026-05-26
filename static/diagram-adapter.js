@@ -75,9 +75,15 @@ const SENSOR_TEXT_POSITION = {
     'sensor-xmeas-03': { placement: 'left', offset: 5  },
     'sensor-xmeas-04': { placement: 'left', offset: 5  },
     'sensor-xmeas-05': { placement: 'above', offset: 5  },
-    'sensor-xmeas-06': { placement: 'above', offset: 10  },
+    'sensor-xmeas-06': { placement: 'right', offset: 5  },
+    'sensor-xmeas-07': { placement: 'above', offset: 5  },
+    'sensor-xmeas-09': { placement: 'above', offset: 5  },
+    'sensor-xmeas-10': { placement: 'above', offset: 5  },
     'sensor-xmeas-14': { placement: 'above', offset: 5  },
     'sensor-xmeas-15': { placement: 'right', offset: 5  },
+    'sensor-xmeas-18': { placement: 'right', offset: 5  },
+    'sensor-xmeas-20': { placement: 'above', offset: 5  },
+    // Atuadores
     'actuator-xmv-01': { placement: 'below', offset: 0  },
     'actuator-xmv-02': { placement: 'below', offset: 0  },
     'actuator-xmv-03': { placement: 'below', offset: 0  },
@@ -241,6 +247,327 @@ function updateUnit(id, tempC) {
         el.style.fill = color;
         el.style.fillOpacity = '0.45';
     });
+}
+
+// ── SVGControlChart ──────────────────────────────────────────────────────────
+//
+// Widget fechado: até 3 barras verticais (estado atual) com rastro suave saindo
+// à esquerda de cada barra (histórico). Normalização por série usando min/max
+// declarados no config; se omitidos, usa auto-scale do próprio buffer.
+//
+// Série: { key, label, color, min?, max? }
+// Propriedades extras (derive, hideTrend, dashed…) são ignoradas pelo componente
+// e podem ser usadas pelo chamador como decoração.
+
+function _smoothPath(pts) {
+    if (pts.length < 2) return '';
+    if (pts.length === 2)
+        return `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)} L ${pts[1].x.toFixed(1)} ${pts[1].y.toFixed(1)}`;
+    let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+    for (let i = 1; i < pts.length - 1; i++) {
+        const mx = ((pts[i].x + pts[i + 1].x) / 2).toFixed(1);
+        const my = ((pts[i].y + pts[i + 1].y) / 2).toFixed(1);
+        d += ` Q ${pts[i].x.toFixed(1)} ${pts[i].y.toFixed(1)} ${mx} ${my}`;
+    }
+    const lp = pts[pts.length - 1];
+    return d + ` L ${lp.x.toFixed(1)} ${lp.y.toFixed(1)}`;
+}
+
+class SVGControlChart {
+    constructor({ id, anchor, bufferSize = 60, series = [], title = '', tep = '', barSide = 'right' }) {
+        this.id         = id;
+        this.anchor     = anchor;
+        this.bufferSize = bufferSize;
+        this.series     = series;
+        this.title      = title;
+        this.tep        = tep;
+        this.barSide    = barSide;
+
+        this._buffers     = Object.fromEntries(series.map(s => [s.key, []]));
+        this._svgEl       = null;
+        this._paths       = {};   // key → <path> rastro suave
+        this._connectors  = {};   // key → <line> liga rastro à barra
+        this._barTracks   = {};   // key → <rect> track
+        this._barFills    = {};   // key → <rect> fill
+        this._maxEls      = {};   // key → <line> marca de máximo (se showMax)
+        this._barValues   = {};   // key → <text> valor atual
+        this._tooltipEl   = null;
+        this._titleEl     = null;
+        this._container   = null;
+        this._ro          = null;
+    }
+
+    mount(container) {
+        if (!container) return this;
+        this._container = container;
+        const NS = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(NS, 'svg');
+        svg.id = `ctrl-${this.id}`;
+        svg.classList.add('svg-control-chart');
+        svg.style.cssText = 'position:absolute;pointer-events:auto;z-index:10;overflow:hidden;';
+
+        // Fundo
+        const bg = document.createElementNS(NS, 'rect');
+        bg.setAttribute('width', '100%');
+        bg.setAttribute('height', '100%');
+        bg.setAttribute('class', 'chart-bg');
+        svg.appendChild(bg);
+
+        // Por série (z-order: conector → rastro → track → fill → max → labels)
+        this.series.forEach(s => {
+            // Conector horizontal: liga extremo direito do rastro à barra
+            const conn = document.createElementNS(NS, 'line');
+            conn.setAttribute('class', 'chart-connector');
+            conn.style.stroke = s.color;
+            svg.appendChild(conn);
+            this._connectors[s.key] = conn;
+
+            // Rastro suave
+            const path = document.createElementNS(NS, 'path');
+            path.setAttribute('fill', 'none');
+            path.setAttribute('class', 'chart-trace');
+            path.style.stroke = s.color;
+            svg.appendChild(path);
+            this._paths[s.key] = path;
+
+            // Barra — track
+            const track = document.createElementNS(NS, 'rect');
+            track.setAttribute('class', 'chart-bar-track');
+            svg.appendChild(track);
+            this._barTracks[s.key] = track;
+
+            // Barra — fill
+            const fill = document.createElementNS(NS, 'rect');
+            fill.setAttribute('class', 'chart-bar-fill');
+            fill.style.fill = s.color;
+            svg.appendChild(fill);
+            this._barFills[s.key] = fill;
+
+            // Marca de máximo (opcional — declarada por série via showMax: true)
+            if (s.showMax) {
+                const mx = document.createElementNS(NS, 'line');
+                mx.setAttribute('class', 'chart-bar-max');
+                mx.style.stroke = s.color;
+                svg.appendChild(mx);
+                this._maxEls[s.key] = mx;
+            }
+
+            // Valor atual
+            const val = document.createElementNS(NS, 'text');
+            val.setAttribute('class', 'chart-bar-value');
+            val.style.fill = s.color;
+            svg.appendChild(val);
+            this._barValues[s.key] = val;
+        });
+
+        // Tooltip HTML — criado uma vez por instância, fixo no body
+        const tip = document.createElement('div');
+        tip.className = 'chart-tooltip';
+        tip.style.display = 'none';
+        document.body.appendChild(tip);
+        this._tooltipEl = tip;
+
+        svg.addEventListener('mousemove', (e) => {
+            const lines = this.series.map(s => {
+                const buf  = this._buffers[s.key];
+                const last = buf.length ? buf[buf.length - 1] : null;
+                const val  = last != null ? (last < 10 ? last.toFixed(2) : last.toFixed(1)) : '—';
+                const unit = s.unit ? ` ${s.unit}` : '';
+                return `<span style="color:${s.color}">■</span> ${s.label || s.key}: <b>${val}${unit}</b>`;
+            }).join('<br>');
+            tip.innerHTML = lines;
+            tip.style.display = 'block';
+            const offRight = e.clientX + 16 + tip.offsetWidth > window.innerWidth;
+            tip.style.left = (offRight ? e.clientX - 12 - tip.offsetWidth : e.clientX + 14) + 'px';
+            tip.style.top  = (e.clientY - 10) + 'px';
+        });
+        svg.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+
+        // Título (por cima de tudo — z-order SVG)
+        if (this.title) {
+            const t = document.createElementNS(NS, 'text');
+            t.setAttribute('class', 'chart-title');
+            t.textContent = this.title;
+            svg.appendChild(t);
+            this._titleEl = t;
+        }
+
+        this._svgEl = svg;
+        container.appendChild(svg);
+
+        this._ro = new ResizeObserver(() => this._reposition());
+        this._ro.observe(container);
+
+        window._svgCharts = window._svgCharts || {};
+        window._svgCharts[this.id] = { instance: this, label: this.title || this.id, tep: this.tep, anchor: this.anchor };
+
+        this._reposition();
+        return this;
+    }
+
+    push(key, value) {
+        const buf = this._buffers[key];
+        if (!buf) return;
+        buf.push(value);
+        if (buf.length > this.bufferSize) buf.shift();
+        this._reposition();
+    }
+
+    _reposition() {
+        if (!this._svgEl || !this._container) return;
+        const anchor = document.querySelector(`[data-cell-id="${this.anchor}"]`);
+        if (!anchor) return;
+
+        const cr = this._container.getBoundingClientRect();
+        const ar = anchor.getBoundingClientRect();
+
+        const left = ar.left - cr.left + this._container.scrollLeft;
+        const top  = ar.top  - cr.top  + this._container.scrollTop;
+        const w    = ar.width;
+        const h    = ar.height;
+        if (w < 2 || h < 2) return;
+
+        this._svgEl.style.left   = `${left}px`;
+        this._svgEl.style.top    = `${top}px`;
+        this._svgEl.style.width  = `${w}px`;
+        this._svgEl.style.height = `${h}px`;
+        this._svgEl.setAttribute('viewBox', `0 0 ${w} ${h}`);
+
+        this._redraw(w, h);
+    }
+
+    _redraw(w, h) {
+        const n = this.series.length;
+        if (n === 0) return;
+
+        const BAR_W     = 14;
+        const BAR_GAP   = 6;
+        const TRACE_GAP = 8;
+        const PAD = { t: this.title ? 20 : 4, b: 6, l: 6, r: 4 };
+
+        const barsW  = n * BAR_W + (n - 1) * BAR_GAP;
+        const left   = this.barSide === 'left';
+        const barsX  = left ? PAD.l : w - PAD.r - barsW;
+        const traceStartX = left ? PAD.l + barsW + TRACE_GAP : PAD.l;
+        const traceEndX   = left ? w - PAD.r : barsX - TRACE_GAP;
+        const plotH  = h - PAD.t - PAD.b;
+        if (plotH < 4 || traceEndX <= traceStartX) return;
+
+        if (this._titleEl) {
+            this._titleEl.setAttribute('x', '4');
+            this._titleEl.setAttribute('y', '3');
+        }
+
+        this.series.forEach((s, i) => {
+            const buf  = this._buffers[s.key] || [];
+            const barX = barsX + i * (BAR_W + BAR_GAP);
+
+            // Normalização por série: min/max fixo ou auto-scale do buffer
+            let lo = s.min, hi = s.max;
+            if (lo == null || hi == null) {
+                if (!buf.length) return;
+                lo = Math.min(...buf);
+                hi = Math.max(...buf);
+            }
+            const range = hi - lo || 1;
+            const norm  = v => Math.max(0, Math.min(1, (v - lo) / range));
+            const toY   = v => PAD.t + (1 - norm(v)) * plotH;
+
+            // Barra — track
+            const track = this._barTracks[s.key];
+            if (track) {
+                track.setAttribute('x',      barX.toFixed(1));
+                track.setAttribute('y',      PAD.t.toFixed(1));
+                track.setAttribute('width',  BAR_W);
+                track.setAttribute('height', plotH.toFixed(1));
+            }
+
+            // Barra — fill + valor
+            const fillEl = this._barFills[s.key];
+            const valEl  = this._barValues[s.key];
+            const last   = buf.length ? buf[buf.length - 1] : null;
+
+            if (last != null && isFinite(last)) {
+                const fillH = Math.max(1, norm(last) * plotH);
+                const fillY = PAD.t + plotH - fillH;
+                if (fillEl) {
+                    fillEl.setAttribute('x',      barX.toFixed(1));
+                    fillEl.setAttribute('y',      fillY.toFixed(1));
+                    fillEl.setAttribute('width',  BAR_W);
+                    fillEl.setAttribute('height', fillH.toFixed(1));
+                    fillEl.style.display = '';
+                }
+                if (valEl) {
+                    valEl.textContent = last < 10 ? last.toFixed(1) : last.toFixed(0);
+                    valEl.setAttribute('x', (barX + BAR_W / 2).toFixed(1));
+                    valEl.setAttribute('y', (fillY - 1).toFixed(1));
+                }
+            } else {
+                if (fillEl) fillEl.style.display = 'none';
+                if (valEl)  valEl.textContent = '';
+            }
+
+            // Rastro suave
+            // barSide right: idx=0 (oldest) → traceStartX, idx=n-1 (newest) → traceEndX
+            // barSide left:  idx=0 (oldest) → traceEndX,   idx=n-1 (newest) → traceStartX
+            const pathEl = this._paths[s.key];
+            if (pathEl) {
+                if (buf.length >= 2) {
+                    const traceW = traceEndX - traceStartX;
+                    const pts = buf.map((v, idx) => ({
+                        x: left
+                            ? traceStartX + ((buf.length - 1 - idx) / (buf.length - 1)) * traceW
+                            : traceStartX + (idx / (buf.length - 1)) * traceW,
+                        y: toY(v),
+                    }));
+                    pathEl.setAttribute('d', _smoothPath(pts));
+                } else {
+                    pathEl.setAttribute('d', '');
+                }
+            }
+
+            // Conector: liga ponto mais recente do rastro à barra
+            const connEl = this._connectors[s.key];
+            if (connEl) {
+                if (last != null && isFinite(last)) {
+                    const cy = toY(last).toFixed(1);
+                    // right: rastro termina em traceEndX → borda esquerda da barra
+                    // left:  rastro termina em traceStartX → borda direita da barra
+                    connEl.setAttribute('x1', left ? (barX + BAR_W).toFixed(1) : traceEndX.toFixed(1));
+                    connEl.setAttribute('y1', cy);
+                    connEl.setAttribute('x2', left ? traceStartX.toFixed(1) : barX.toFixed(1));
+                    connEl.setAttribute('y2', cy);
+                    connEl.style.display = '';
+                } else {
+                    connEl.style.display = 'none';
+                }
+            }
+
+            // Marca de máximo atravessando a barra (apenas se showMax: true na série)
+            const mxEl = this._maxEls[s.key];
+            if (mxEl) {
+                if (buf.length > 0) {
+                    const mxY = toY(Math.max(...buf)).toFixed(1);
+                    mxEl.setAttribute('x1', barX.toFixed(1));
+                    mxEl.setAttribute('y1', mxY);
+                    mxEl.setAttribute('x2', (barX + BAR_W).toFixed(1));
+                    mxEl.setAttribute('y2', mxY);
+                    mxEl.style.display = '';
+                } else {
+                    mxEl.style.display = 'none';
+                }
+            }
+
+        });
+
+    }
+
+    destroy() {
+        this._ro?.disconnect();
+        this._svgEl?.remove();
+        this._tooltipEl?.remove();
+        if (window._svgCharts) delete window._svgCharts[this.id];
+    }
 }
 
 // ── Inspecção / diagnóstico ──────────────────────────────────────────────────

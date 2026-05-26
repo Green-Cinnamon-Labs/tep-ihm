@@ -136,6 +136,7 @@ function initDiagramInteraction() {
         _zoom += e.deltaY > 0 ? -0.1 : 0.1;
         _zoom = Math.max(0.5, Math.min(3, _zoom));
         svg.style.transform = `scale(${_zoom}) translate(${_panX}px, ${_panY}px)`;
+        _repositionAllCharts();
     }, { passive: false });
 
     container.addEventListener('mousedown', (e) => {
@@ -152,6 +153,7 @@ function initDiagramInteraction() {
         _panX = e.clientX - _panStartX;
         _panY = e.clientY - _panStartY;
         svg.style.transform = `scale(${_zoom}) translate(${_panX}px, ${_panY}px)`;
+        _repositionAllCharts();
     });
 
     document.addEventListener('mouseup', () => {
@@ -162,6 +164,7 @@ function initDiagramInteraction() {
     container.addEventListener('dblclick', () => {
         _zoom = 1; _panX = 0; _panY = 0;
         svg.style.transform = 'scale(1) translate(0, 0)';
+        _repositionAllCharts();
     });
 
     console.log('[diagram] Interaction initialized (zoom: wheel, pan: Ctrl+drag or middle-click)');
@@ -236,6 +239,76 @@ function updateSensorValue(sensorId, value, unit = '') {
     textEl.textContent = tag ? `${tag}  ${val}` : val;
 }
 
+// ── SVGControlChart — instâncias ─────────────────────────────────────────────
+
+let _controlCharts = {};
+
+function _repositionAllCharts() {
+    Object.values(_controlCharts).forEach(c => c._reposition());
+}
+
+function initControlCharts(container) {
+    const C = (key, cfg) => {
+        _controlCharts[key] = new SVGControlChart(cfg).mount(container);
+    };
+
+    C('reactor-temp', {
+        id: 'ctrl-reactor-temp', anchor: 'chart-reactor-temp',
+        title: 'Temp. Reator', bufferSize: 60,
+        tep: 'XMEAS(9) temperatura do reator vs XMV(10) fluxo de CWS. Alta temperatura indica sobrecarga exotérmica; XMV(10) deve abrir para compensar.',
+        series: [
+            { key: 'xmeas_9', label: 'Temperatura Reator',   unit: '°C', color: '#1565c0', min: 80,  max: 170 },
+            { key: 'xmv_10',  label: 'Água de Resfriamento', unit: '%',  color: '#42a5f5', min: 0,   max: 100 },
+        ],
+    });
+
+    C('reactor-press', {
+        id: 'ctrl-reactor-press', anchor: 'chart-reactor-press',
+        title: 'Pressão Reator', bufferSize: 60,
+        tep: 'XMEAS(7) pressão do reator vs XMV(6) válvula de purga. Pressão alta indica acúmulo de inertes; purga deve abrir para aliviar.',
+        series: [
+            { key: 'xmeas_7', label: 'Pressão Reator',   unit: 'kPa', color: '#1565c0', min: 2400, max: 3200 },
+            { key: 'xmv_6',   label: 'Válvula de Purga', unit: '%',   color: '#42a5f5', min: 0,    max: 100  },
+        ],
+    });
+
+    C('separator-level', {
+        id: 'ctrl-separator-level', anchor: 'chart-separator-level',
+        title: 'Nível Separador', bufferSize: 60, barSide: 'left',
+        tep: 'XMEAS(12) nível do separador vs XMV(7) válvula de underflow. Nível acumulando sem resposta indica falha de controle de inventário.',
+        series: [
+            { key: 'xmeas_12', label: 'Nível Separador',   unit: '%', color: '#1565c0', min: 0, max: 100 },
+            { key: 'xmv_7',    label: 'Válvula Underflow', unit: '%', color: '#42a5f5', min: 0, max: 100 },
+        ],
+    });
+
+    C('stripper', {
+        id: 'ctrl-stripper', anchor: 'chart-stripper',
+        title: 'Stripper', bufferSize: 60, barSide: 'left',
+        tep: 'XMEAS(15) nível, XMV(8) saída de produto e XMEAS(18) temperatura do stripper. As três juntas descrevem o estado operacional da coluna.',
+        series: [
+            { key: 'xmeas_15', label: 'Nível',  unit: '%',  color: '#ce93d8', min: 0,  max: 100 },
+            { key: 'xmeas_18', label: 'Temperatura',     unit: '°C', color: '#4fc3f7', min: 50, max: 120 },
+            { key: 'xmv_8',    label: 'Válvula Produto (XMV-8)', unit: '%',  color: '#1565c0', min: 0,  max: 100 },
+        ],
+    });
+
+    C('recycle-purge', {
+        id: 'ctrl-recycle-purge', anchor: 'chart-recycle-purge',
+        title: 'Purge Balance', bufferSize: 60,
+        tep: 'XMV(6) válvula de purga e razão Purga/Reciclo %. Válvula abre → purga sobe → razão aumenta → inertes reduzem.',
+        series: [
+            { key: 'xmv_6',       label: 'Válvula de Purga',  unit: '%',  color: '#1565c0', min: 0, max: 100 },
+            { key: 'purge_ratio', label: 'Razão Purga/Reciclo', unit: '%', color: '#42a5f5', min: 0, max: 5,
+              showMax: true,
+              derive: (snap) => snap.xmeas_5 > 0 ? (snap.xmeas_10 / snap.xmeas_5) * 100 : null,
+            },
+        ],
+    });
+
+    console.log('[diagram] SVGControlCharts inicializados:', Object.keys(_controlCharts));
+}
+
 // ── Main update function ──────────────────────────────────────────────────────
 // Chamado a cada WebSocket message com arrays xmeas[41] e xmv[12].
 // Indexação: XMEAS(n) = xmeas[n-1], XMV(n) = xmv[n-1]
@@ -306,6 +379,22 @@ function updateDiagram(xmeas, xmv) {
         if (xmeas[n - 1] == null) continue;
         updateSensorValue(`sensor-xmeas-${n}`, xmeas[n - 1], '%');
     }
+
+    // SVGControlCharts — push de valores a cada tick
+    const cc = _controlCharts;
+    if (cc['reactor-temp'])    { cc['reactor-temp'].push('xmeas_9',  xmeas[8]);  cc['reactor-temp'].push('xmv_10',   xmv[9]);   }
+    if (cc['reactor-press'])   { cc['reactor-press'].push('xmeas_7', xmeas[6]);  cc['reactor-press'].push('xmv_6',   xmv[5]);   }
+    if (cc['separator-level']) { cc['separator-level'].push('xmeas_12', xmeas[11]); cc['separator-level'].push('xmv_7', xmv[6]); }
+    if (cc['stripper'])        { cc['stripper'].push('xmeas_15', xmeas[14]); cc['stripper'].push('xmv_8', xmv[7]); cc['stripper'].push('xmeas_18', xmeas[17]); }
+    if (cc['recycle-purge']) {
+        const chart = cc['recycle-purge'];
+        const snap  = { xmeas_5: xmeas[4], xmeas_10: xmeas[9], xmv_6: xmv[5] };
+        chart.push('xmv_6', snap.xmv_6);
+        chart.series.filter(s => s.derive).forEach(s => {
+            const v = s.derive(snap);
+            if (v != null) chart.push(s.key, v);
+        });
+    }
 }
 
 // ── Initialization ────────────────────────────────────────────────────────────
@@ -323,4 +412,5 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
     initDiagramInteraction();
+    if (container) initControlCharts(container);
 });
