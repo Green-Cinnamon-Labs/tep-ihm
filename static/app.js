@@ -70,17 +70,6 @@ const XMV_META = [
 ];
 
 // Nomes dos alarmes (mesmo que a planta expõe via gRPC)
-const ALARM_NAMES = [
-    "Reactor High Pressure",
-    "Reactor High Level",
-    "Reactor High Temperature",
-    "Separator High Level",
-    "Stripper High Level",
-    "Stripper High Underflow",
-    "Reactor Low Level",
-    "Separator Low Level",
-    "Stripper Low Level",
-];
 
 // ── Chart setup ──────────────────────────────────────────────────────────────
 
@@ -146,6 +135,7 @@ const $isdBanner = document.getElementById('isd-banner');
 // ── State ────────────────────────────────────────────────────────────────────
 
 let _currentActiveIdv = [];  // Track current active disturbances from WebSocket
+const _idvMagnitudes = { 3: 5, 4: 5, 5: 5 };  // magnitude local por IDV (°C)
 
 // ── WebSocket ────────────────────────────────────────────────────────────────
 
@@ -230,9 +220,9 @@ function renderOperator(op) {
 const IDV_META = [
     { n:  1, type: "Step",   desc: "A/C ratio in feed (stream 4)" },
     { n:  2, type: "Step",   desc: "B composition in feed (stream 4)" },
-    { n:  3, type: "Step",   desc: "D feed temperature" },
-    { n:  4, type: "Step",   desc: "Reactor CW inlet temp (+5°C)" },
-    { n:  5, type: "Step",   desc: "Condenser CW inlet temp (+5°C)" },
+    { n:  3, type: "Step",   desc: "D feed temperature",              configMag: true },
+    { n:  4, type: "Step",   desc: "Reactor CW inlet temp",           configMag: true },
+    { n:  5, type: "Step",   desc: "Condenser CW inlet temp",         configMag: true },
     { n:  6, type: "Step",   desc: "A feed loss (stream 1 → 0)" },
     { n:  7, type: "Step",   desc: "C header pressure drop" },
     { n:  8, type: "Random", desc: "A/B/C feed composition noise" },
@@ -254,12 +244,18 @@ const $idvList = document.getElementById('idv-list');
 
 function renderIdv(activeList) {
     const active = new Set(activeList || []);
-    $idvList.innerHTML = IDV_META.map(({ n, type, desc }) => {
+    $idvList.innerHTML = IDV_META.map(({ n, type, desc, configMag }) => {
         const on = active.has(n);
+        const magInput = configMag
+            ? `<input class="idv-mag-input" type="number" data-idv="${n}"
+                      value="${_idvMagnitudes[n] ?? 5}" min="0.1" step="1"
+                      title="Magnitude (°C)">`
+            : '';
         return `<div class="idv-item ${on ? 'idv-active' : ''}">
             <div class="idv-content">
                 <strong>IDV(${n})</strong> [${type}] ${desc}
             </div>
+            ${magInput}
             <button class="idv-toggle ${on ? 'idv-toggle-on' : 'idv-toggle-off'}"
                     data-idv="${n}"
                     title="${on ? 'Desativar' : 'Ativar'} IDV(${n})">
@@ -268,9 +264,21 @@ function renderIdv(activeList) {
         </div>`;
     }).join('');
 
-    // Event listeners for toggle buttons
     document.querySelectorAll('.idv-toggle').forEach(btn => {
         btn.addEventListener('click', toggleIdv);
+    });
+    document.querySelectorAll('.idv-mag-input').forEach(inp => {
+        inp.addEventListener('change', async (e) => {
+            const idvNum = parseInt(e.target.dataset.idv);
+            const mag    = parseFloat(e.target.value);
+            if (!mag || mag <= 0) { e.target.value = _idvMagnitudes[idvNum] ?? 5; return; }
+            _idvMagnitudes[idvNum] = mag;
+            await fetch('/disturbances/magnitude', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ idv: idvNum, magnitude: mag }),
+            });
+        });
     });
 }
 
@@ -295,6 +303,8 @@ async function toggleIdv(event) {
     });
 
     if (resp.ok) {
+        _currentActiveIdv = Array.from(currentActive);
+        renderIdv(_currentActiveIdv);
         console.log(`[idv] IDV(${idvNum}) toggled to ${!isActive}`);
     } else {
         console.error(`[idv] Failed to toggle IDV(${idvNum})`);
@@ -350,6 +360,7 @@ function makeDraggable(panel, handle) {
 
     handle.addEventListener('pointerdown', e => {
         if (e.button !== 0) return;
+        if (e.target.closest('button')) return;
 
         const rect    = panel.getBoundingClientRect();
         const startX  = e.clientX;
@@ -424,7 +435,8 @@ function update(data) {
     }
 
     // Plant status (header tag)
-    const anyAlarm = alarms && alarms.some(a => a.active);
+    const localAlarms = computeLocalAlarms(xmeas);
+    const anyAlarm = localAlarms.length > 0;
     if (isd_active) {
         $plantStatus.textContent = 'ISD';
         $plantStatus.className = 'header-info status-tag status-alarm';
@@ -438,7 +450,7 @@ function update(data) {
 
     // Alarms — suprimido durante demo mode (badges geridos pelo demo)
     if (!window._demoActive) {
-        updateAlarms(alarms);
+        updateAlarms(xmeas);
     }
 
     // Time label for charts
@@ -487,24 +499,6 @@ function update(data) {
     }
 }
 
-// Catálogo unificado: gRPC alarms + limites locais → elemento SVG + severidade
-// severity 'alarm' = hi_hi (quadrado vermelho) | 'warning' = hi/lo (triângulo âmbar)
-const ALARM_CATALOG = [
-    { variable: 'Reactor High Pressure',    element: 'sensor-xmeas-07', severity: 'alarm'   },
-    { variable: 'Reactor High Level',       element: 'sensor-xmeas-08', severity: 'alarm'   },
-    { variable: 'Reactor High Temperature', element: 'unit-reactor',    severity: 'alarm'   },
-    { variable: 'Reactor Low Level',        element: 'sensor-xmeas-08', severity: 'warning', offset: 'below' },
-    { variable: 'Separator High Level',     element: 'sensor-xmeas-12', severity: 'alarm'   },
-    { variable: 'Separator Low Level',      element: 'sensor-xmeas-12', severity: 'warning', offset: 'below' },
-    { variable: 'Stripper High Level',      element: 'sensor-xmeas-15', severity: 'alarm'   },
-    { variable: 'Stripper Low Level',       element: 'sensor-xmeas-15', severity: 'warning', offset: 'below' },
-    { variable: 'Stripper High Underflow',  element: 'unit-stripper',   severity: 'alarm'   },
-    // Locais (temperatura de vasos e compressores — derivados pelo frontend)
-    { variable: 'Separator High Temperature', element: 'unit-separator',       severity: 'alarm'   },
-    { variable: 'Stripper High Temperature',  element: 'unit-stripper',        severity: 'alarm'   },
-    { variable: 'Condenser High Temperature', element: 'unit-condenser',       severity: 'warning' },
-    { variable: 'Compressor High Work',       element: 'unit-compressor-1',    severity: 'alarm'   },
-];
 
 const _SEV_ICON = {
     alarm:   '/static/sev-1.drawio.png',
@@ -531,9 +525,8 @@ function _badgeShape(NS, entry, cx, cy, n) {
     return g;
 }
 
-// Aceita dois formatos:
-//   gRPC:   [{variable, active}]          → resolve element+severity via ALARM_CATALOG
-//   direto: [{element, severity, active}] → usa diretamente (usado pelo demo tour)
+// Espera formato direto: [{element, severity, active, offset?}]
+// Usado por computeLocalAlarms (planta real) e pelo demo tour.
 function renderAlarmBadges(alarms) {
     const svg = document.querySelector('#diagram-container svg');
     if (!svg) return;
@@ -550,18 +543,9 @@ function renderAlarmBadges(alarms) {
         return p.matrixTransform(inv);
     };
 
-    // Normaliza para lista de {element, severity, offset}
-    const resolved = [];
-    alarms.filter(a => a.active).forEach(a => {
-        if (a.element) {
-            // formato direto
-            resolved.push({ element: a.element, severity: a.severity || 'alarm', offset: a.offset });
-        } else {
-            // formato gRPC → lookup no catálogo
-            const entry = ALARM_CATALOG.find(e => e.variable === a.variable);
-            if (entry) resolved.push(entry);
-        }
-    });
+    const resolved = alarms
+        .filter(a => a.active && a.element)
+        .map(a => ({ element: a.element, severity: a.severity || 'alarm', offset: a.offset }));
     if (!resolved.length) return;
 
     resolved.forEach((entry, i) => {
@@ -579,19 +563,92 @@ function renderAlarmBadges(alarms) {
     });
 }
 
-function updateAlarms(alarms) {
-    renderAlarmBadges(alarms);
+// Computa alarmes graduados (L1 alarm / L2 warning / L3 advisory) a partir de XMEAS.
+// Retorna formato direto {element, severity, active:true} para renderAlarmBadges.
+//
+// Nominais (Modo 1, steady-state):
+//   Pressão reator  ~2705 kPa   ISD > 3000 kPa
+//   Temp reator     ~120 °C     ISD > 175 °C
+//   Níveis          50-70 %     ISD < 10% ou > ~114% (vlr limite físico)
+//   Sep temp        ~79 °C
+//   Stripper temp   ~67 °C
+//   Stripper UF     ~25 m³/hr
+//   Compressor      ~335 kW
+//
+// EDITE AQUI para ajustar os limiares por variável.
+//
+function computeLocalAlarms(xmeas) {
+    if (!xmeas || xmeas.length < 22) return [];
+    const out = [];
+    function badge(el, sev) { out.push({ element: el, severity: sev, active: true }); }
+
+    // ── Pressão do reator — XMEAS(7), idx 6, kPa ─────────────────────────
+    const p = xmeas[6];
+    if      (p > 2940) badge('sensor-xmeas-07', 'alarm');
+    else if (p > 2870) badge('sensor-xmeas-07', 'warning');
+    else if (p > 2780) badge('sensor-xmeas-07', 'advisory');
+
+    // ── Temperatura do reator — XMEAS(9), idx 8, °C ──────────────────────
+    const tr = xmeas[8];
+    if      (tr > 168) badge('unit-reactor', 'alarm');
+    else if (tr > 153) badge('unit-reactor', 'warning');
+    else if (tr > 138) badge('unit-reactor', 'advisory');
+
+    // ── Nível do reator — XMEAS(8), idx 7, % ─────────────────────────────
+    const rlv = xmeas[7];
+    if      (rlv > 88 || rlv < 12) badge('sensor-xmeas-08', 'alarm');
+    else if (rlv > 82 || rlv < 18) badge('sensor-xmeas-08', 'warning');
+    else if (rlv > 78 || rlv < 22) badge('sensor-xmeas-08', 'advisory');
+
+    // ── Temperatura do separador — XMEAS(11), idx 10, °C ─────────────────
+    const ts = xmeas[10];
+    if      (ts > 110) badge('unit-separator', 'alarm');
+    else if (ts > 100) badge('unit-separator', 'warning');
+    else if (ts >  92) badge('unit-separator', 'advisory');
+
+    // ── Nível do separador — XMEAS(12), idx 11, % ────────────────────────
+    const slv = xmeas[11];
+    if      (slv > 88 || slv < 12) badge('sensor-xmeas-12', 'alarm');
+    else if (slv > 82 || slv < 18) badge('sensor-xmeas-12', 'warning');
+    else if (slv > 78 || slv < 22) badge('sensor-xmeas-12', 'advisory');
+
+    // ── Nível do stripper — XMEAS(15), idx 14, % ─────────────────────────
+    const stlv = xmeas[14];
+    if      (stlv > 88 || stlv < 12) badge('unit-stripper', 'alarm');
+    else if (stlv > 82 || stlv < 18) badge('unit-stripper', 'warning');
+    else if (stlv > 78 || stlv < 22) badge('unit-stripper', 'advisory');
+
+    // ── Underflow do stripper — XMEAS(17), idx 16, m³/hr ─────────────────
+    const uf = xmeas[16];
+    if      (uf > 36) badge('unit-stripper', 'alarm');
+    else if (uf > 32) badge('unit-stripper', 'warning');
+    else if (uf > 28) badge('unit-stripper', 'advisory');
+
+    // ── Temperatura do stripper — XMEAS(18), idx 17, °C ──────────────────
+    const tst = xmeas[17];
+    if      (tst > 100) badge('unit-stripper', 'alarm');
+    else if (tst >  88) badge('unit-stripper', 'warning');
+    else if (tst >  78) badge('unit-stripper', 'advisory');
+
+    // ── Temperatura do condensador — XMEAS(18)/tcc, aprox via tws idx 21 ─
+    // XMEAS(22) = tws = Sep CW outlet temp (nominal ~77 °C)
+    const tcws_out = xmeas[21];
+    if      (tcws_out > 110) badge('unit-condenser', 'warning');
+    else if (tcws_out >  98) badge('unit-condenser', 'advisory');
+
+    // ── Trabalho do compressor — XMEAS(20), idx 19, kW ───────────────────
+    const cw = xmeas[19];
+    if      (cw > 420) badge('unit-compressor-1', 'alarm');
+    else if (cw > 385) badge('unit-compressor-1', 'warning');
+    else if (cw > 360) badge('unit-compressor-1', 'advisory');
+
+    return out;
 }
 
-function alarmHtml(name, active) {
-    const cls = active ? 'alarm-active' : 'alarm-inactive';
-    const statusText = active ? 'ALARM' : 'ok';
-    return `<div class="alarm-item ${cls}">
-        <span class="alarm-indicator"></span>
-        <span class="alarm-status">${statusText}</span>
-        <span class="alarm-label">${name}</span>
-    </div>`;
+function updateAlarms(xmeas) {
+    renderAlarmBadges(computeLocalAlarms(xmeas));
 }
+
 
 function pushData(chart, values) {
     values.forEach((v, i) => {
@@ -705,6 +762,33 @@ document.getElementById('btn-rec-stop').addEventListener('click', async () => {
 
 // Estado inicial: parado
 _update_recording_ui(false);
+
+// ── Simulation Speed Control ──────────────────────────────────────────────────
+
+async function setSimulationSpeed(factor) {
+    try {
+        const resp = await fetch('/simulation/speed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ factor })
+        });
+        if (resp.ok) {
+            document.querySelectorAll('.sim-speed-btn').forEach(btn => {
+                btn.classList.toggle('speed-active', Number(btn.dataset.factor) === factor);
+            });
+            console.log(`[sim] speed → ${factor === 0 ? 'max' : factor + '×'}`);
+        }
+    } catch (e) {
+        console.error('[sim] speed set failed', e);
+    }
+}
+
+document.querySelectorAll('.sim-speed-btn').forEach(btn => {
+    btn.addEventListener('click', () => setSimulationSpeed(Number(btn.dataset.factor)));
+});
+
+// Always reset to 1× on page load
+setSimulationSpeed(1);
 
 // ── Simulation Pause Button ──────────────────────────────────────────────────────
 

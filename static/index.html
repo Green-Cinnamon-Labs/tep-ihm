@@ -23,6 +23,13 @@
             <span id="rec-timer" class="rec-timer">00:00</span>
         </span>
         <button id="btn-sim-pause" class="sim-control-btn sim-running" title="Pause simulation">⏸ Pause</button>
+        <span class="sim-speed-group" title="Velocidade de simulação">
+            <button class="sim-speed-btn speed-active" data-factor="1"  title="1× real-time">1×</button>
+            <button class="sim-speed-btn"              data-factor="2"  title="2× real-time">2×</button>
+            <button class="sim-speed-btn"              data-factor="5"  title="5× real-time">5×</button>
+            <button class="sim-speed-btn"              data-factor="10" title="10× real-time">10×</button>
+            <button class="sim-speed-btn"              data-factor="0"  title="Máximo (sem delay)">Max</button>
+        </span>
         <div class="demo-dropdown-wrap">
             <button id="btn-demo" class="sim-control-btn" onclick="toggleDemoDropdown()" title="Demonstrações visuais ISA-101">▶ Demo ▾</button>
             <div id="demo-dropdown" class="demo-dropdown" hidden>

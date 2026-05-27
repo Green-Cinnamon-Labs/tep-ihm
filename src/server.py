@@ -31,6 +31,7 @@ K8S_NAMESPACE = os.environ.get("K8S_NAMESPACE", "default")
 K8S_CR_NAME = os.environ.get("K8S_CR_NAME", "tep-baseline")
 K8S_SERVER  = os.environ.get("K8S_SERVER", "")   # ex: https://host.docker.internal:6443
 ACTIVE_IDV = []  # Controlled via /disturbances/update endpoint
+IDV_MAGNITUDES: dict[int, float] = {4: 5.0}  # magnitude por IDV (padrão: IDV4 = +5°C)
 RECORD_CSV_PATH = os.environ.get("RECORD_CSV_PATH", "/data/recording.csv")
 
 connected_clients: set[WebSocket] = set()
@@ -201,6 +202,18 @@ async def plant_stream_loop():
                     retries = 0
                     _plant_connection_failed = False
                     _connected = True
+                    # Reenviar estado ativo ao reconectar (planta pode ter reiniciado)
+                    if ACTIVE_IDV or IDV_MAGNITUDES:
+                        try:
+                            resync_stub = plant_pb2_grpc.PlantServiceStub(channel)
+                            resync_req = plant_pb2.UpdateDisturbancesRequest(
+                                active_idv=[int(x) for x in ACTIVE_IDV],
+                                idv_magnitudes={int(k): float(v) for k, v in IDV_MAGNITUDES.items()},
+                            )
+                            await resync_stub.UpdateDisturbances(resync_req)
+                            print(f"[ihm] estado IDV reenviado à planta: {ACTIVE_IDV}")
+                        except Exception as resync_err:
+                            print(f"[ihm] aviso: falha ao reenviar IDV: {resync_err}")
                 snapshot = {
                     "t_h": metrics.t_h,
                     "xmeas": list(metrics.xmeas),
@@ -430,6 +443,36 @@ async def control_simulation(payload: dict):
         return Response(f"Erro: {e}", status_code=400, media_type="text/plain")
 
 
+@app.post("/simulation/speed")
+async def set_simulation_speed(payload: dict):
+    """Define velocidade de simulação. Recebe { 'factor': 0.0 } (0=max, 1=real-time, N=Nx)."""
+    try:
+        import grpc
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "gen"))
+        from tep.v1 import plant_pb2, plant_pb2_grpc
+
+        factor = float(payload.get("factor", 1.0))
+
+        if not CSV_REPLAY:
+            async def _send():
+                try:
+                    channel = grpc.aio.insecure_channel(PLANT_ADDRESS)
+                    stub = plant_pb2_grpc.PlantServiceStub(channel)
+                    req = plant_pb2.SetSpeedRequest(factor=factor)
+                    resp = await stub.SetSpeed(req)
+                    await channel.close()
+                    print(f"[ihm] velocidade → factor={resp.factor}")
+                except Exception as err:
+                    print(f"[ihm] aviso: não pude ajustar velocidade: {err}")
+
+            asyncio.create_task(_send())
+
+        return {"status": "ok", "factor": factor}
+    except Exception as e:
+        print(f"[ihm] erro ao ajustar velocidade: {e}")
+        return Response(f"Erro: {e}", status_code=400, media_type="text/plain")
+
+
 @app.post("/disturbances/update")
 async def update_disturbances(payload: dict):
     """Atualiza a lista de distúrbios ativos em tempo real. Recebe { 'active_idv': [list] }."""
@@ -448,7 +491,10 @@ async def update_disturbances(payload: dict):
                 try:
                     channel = grpc.aio.insecure_channel(PLANT_ADDRESS)
                     stub = plant_pb2_grpc.PlantServiceStub(channel)
-                    request = plant_pb2.UpdateDisturbancesRequest(active_idv=[int(x) for x in ACTIVE_IDV])
+                    request = plant_pb2.UpdateDisturbancesRequest(
+                        active_idv=[int(x) for x in ACTIVE_IDV],
+                        idv_magnitudes={int(k): float(v) for k, v in IDV_MAGNITUDES.items()},
+                    )
                     response = await stub.UpdateDisturbances(request)
                     await channel.close()
                     print(f"[ihm] disturbios atualizados na planta: {ACTIVE_IDV}")
@@ -462,6 +508,43 @@ async def update_disturbances(payload: dict):
         return {"status": "ok", "active_idv": ACTIVE_IDV}
     except Exception as e:
         print(f"[ihm] erro ao atualizar distúrbios: {e}")
+        return Response(f"Erro: {e}", status_code=400, media_type="text/plain")
+
+
+@app.post("/disturbances/magnitude")
+async def update_idv_magnitude(payload: dict):
+    """Define a magnitude de um IDV step. Recebe { 'idv': 4, 'magnitude': 10.0 }"""
+    global IDV_MAGNITUDES
+    try:
+        import grpc
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "gen"))
+        from tep.v1 import plant_pb2, plant_pb2_grpc
+
+        idv_num = int(payload.get("idv", 0))
+        magnitude = float(payload.get("magnitude", 5.0))
+        if idv_num < 1 or idv_num > 20:
+            return Response("IDV inválido", status_code=400, media_type="text/plain")
+
+        IDV_MAGNITUDES[idv_num] = magnitude
+
+        if not CSV_REPLAY:
+            async def _push():
+                try:
+                    channel = grpc.aio.insecure_channel(PLANT_ADDRESS)
+                    stub = plant_pb2_grpc.PlantServiceStub(channel)
+                    req = plant_pb2.UpdateDisturbancesRequest(
+                        active_idv=[int(x) for x in ACTIVE_IDV],
+                        idv_magnitudes={int(k): float(v) for k, v in IDV_MAGNITUDES.items()},
+                    )
+                    await stub.UpdateDisturbances(req)
+                    await channel.close()
+                    print(f"[ihm] IDV({idv_num}) magnitude → {magnitude}")
+                except Exception as err:
+                    print(f"[ihm] aviso: não pude propagar magnitude: {err}")
+            asyncio.create_task(_push())
+
+        return {"status": "ok", "idv": idv_num, "magnitude": magnitude}
+    except Exception as e:
         return Response(f"Erro: {e}", status_code=400, media_type="text/plain")
 
 

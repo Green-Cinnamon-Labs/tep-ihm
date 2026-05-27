@@ -276,6 +276,37 @@ main {
     background: #1565c0;
 }
 
+/* ── Simulation speed buttons ───────────────────────────────────────────── */
+
+.sim-speed-group {
+    display: inline-flex;
+    gap: 2px;
+    align-items: center;
+    margin-left: 2px;
+}
+
+.sim-speed-btn {
+    background: #37474f;
+    color: #b0bec5;
+    border: none;
+    border-radius: 3px;
+    padding: 3px 7px;
+    font-size: 0.7rem;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, color 0.15s;
+}
+
+.sim-speed-btn:hover {
+    background: #546e7a;
+    color: #ffffff;
+}
+
+.sim-speed-btn.speed-active {
+    background: #1565c0;
+    color: #ffffff;
+}
+
 /* ── Row splits ─────────────────────────────────────────────────────────── */
 
 .row-split {
@@ -773,6 +804,23 @@ main {
     background: #1e3248;
     border-color: #4a7aaf;
     color: #90caf9;
+}
+
+.idv-mag-input {
+    background: #0d1b2a;
+    border: 1px solid #1e3248;
+    border-radius: 3px;
+    color: #90caf9;
+    font-family: 'Consolas', monospace;
+    font-size: 11px;
+    padding: 2px 4px;
+    margin-right: 4px;
+    width: 48px;
+    text-align: right;
+}
+.idv-mag-input:focus {
+    outline: none;
+    border-color: #4a7aaf;
 }
 
 /* ── Demo terminal overlay ──────────────────────────────────────────────────── */
