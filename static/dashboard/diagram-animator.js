@@ -403,7 +403,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const container = document.getElementById('diagram-container');
     if (container) {
         try {
-            const res = await fetch('/static/plant-diagram.svg');
+            const res = await fetch('/static/assets/plant-diagram.svg');
             const svgText = await res.text();
             container.innerHTML = svgText;
             console.log('[diagram] SVG carregado de plant-diagram.svg');

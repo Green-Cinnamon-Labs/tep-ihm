@@ -368,7 +368,7 @@ async def reconnect_plant():
 
 @app.get("/")
 async def index():
-    return FileResponse(str(static_dir / "index.html"))
+    return FileResponse(str(static_dir / "dashboard" / "index.html"))
 
 
 @app.get("/recording.csv")
@@ -550,7 +550,7 @@ async def update_idv_magnitude(payload: dict):
 
 @app.get("/analytics")
 async def analytics_page():
-    return FileResponse(str(static_dir / "analytics.html"))
+    return FileResponse(str(static_dir / "analytics" / "index.html"))
 
 
 # ── Capture session API ───────────────────────────────────────────────────────

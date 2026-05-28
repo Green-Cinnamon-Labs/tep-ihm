@@ -501,9 +501,9 @@ function update(data) {
 
 
 const _SEV_ICON = {
-    alarm:   '/static/sev-1.drawio.png',
-    warning: '/static/sev-2.drawio.png',
-    advisory:'/static/sev-3.drawio.png',
+    alarm:   '/static/assets/sev-1.drawio.png',
+    warning: '/static/assets/sev-2.drawio.png',
+    advisory:'/static/assets/sev-3.drawio.png',
 };
 
 function _badgeShape(NS, entry, cx, cy, n) {
