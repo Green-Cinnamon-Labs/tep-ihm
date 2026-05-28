@@ -82,10 +82,14 @@ let _activeSlotIdx = 0;
 
 class Slot {
   constructor(idx) {
-    this.idx        = idx;
-    this.echart     = null;
-    this.el         = null;
-    this.selectedKeys = [];
+    this.idx           = idx;
+    this.echart        = null;
+    this.el            = null;
+    this.selectedKeys  = [];   // keys currently rendered
+    this._assignedKeys = [];   // keys assigned for capture (pre-fetch)
+    this.chartId       = null; // bound chart_capture id from DB
+    this._pollSecs     = 0;
+    this._pollTimer    = null;
   }
 
   build() {
@@ -96,8 +100,10 @@ class Slot {
     el.innerHTML = `
       <div class="slot-header">
         <span class="slot-title">Chart ${this.idx + 1}</span>
-        <span class="slot-selected-vars" id="slot-vars-${this.idx}">No variables selected</span>
-        <button class="slot-btn-focus" title="Make active for query">◎ Focus</button>
+        <span class="slot-selected-vars" id="slot-vars-${this.idx}">No variables assigned</span>
+        <button class="slot-btn-fetch" title="Fetch data for this chart">↻ Fetch</button>
+        <button class="slot-btn-poll" title="Toggle auto-refresh (off → 5s → 10s → 30s)">Auto ▸</button>
+        <button class="slot-btn-focus" title="Make active slot">◎ Focus</button>
         <button class="slot-btn-clear" title="Clear chart">✕</button>
         <button class="slot-btn-remove" title="Remove slot" style="color:var(--muted)">—</button>
       </div>
@@ -106,12 +112,77 @@ class Slot {
       </div>
     `;
 
+    el.querySelector('.slot-btn-fetch').addEventListener('click', () => this.fetch());
+    el.querySelector('.slot-btn-poll').addEventListener('click',  () => this.cyclePoll());
     el.querySelector('.slot-btn-focus').addEventListener('click', () => setActiveSlot(this.idx));
     el.querySelector('.slot-btn-clear').addEventListener('click', () => this.clear());
     el.querySelector('.slot-btn-remove').addEventListener('click', () => removeSlot(this.idx));
 
     this.el = el;
     return el;
+  }
+
+  // Bind a chart_capture record from the DB to this slot
+  bindChart(chart) {
+    this.chartId       = chart.id;
+    this._assignedKeys = chart.selected_vars || [];
+    this.selectedKeys  = this._assignedKeys;
+    const title = this.el?.querySelector('.slot-title');
+    if (title) title.textContent = chart.label || `Chart ${this.idx + 1}`;
+    this._updateVarsLabel();
+  }
+
+  // Assign picker selection to this slot (for pre-capture setup)
+  assign(keys) {
+    this._assignedKeys = keys;
+    this.selectedKeys  = keys;
+    this._updateVarsLabel();
+    saveState();
+  }
+
+  async fetch() {
+    if (!this.chartId) return;
+    const btn = this.el?.querySelector('.slot-btn-fetch');
+    if (btn) { btn.textContent = '…'; btn.disabled = true; }
+    try {
+      await this._fetchByChartId();
+      saveState();
+    } catch (e) {
+      console.error('[slot] fetch error:', e);
+    } finally {
+      if (btn) { btn.textContent = '↻ Fetch'; btn.disabled = false; }
+    }
+  }
+
+  async _fetchByChartId() {
+    const thFrom = document.getElementById('th-from').value;
+    const thTo   = document.getElementById('th-to').value;
+    const params = new URLSearchParams({ chart_id: this.chartId });
+    if (thFrom) params.set('from_th', thFrom);
+    if (thTo)   params.set('to_th',   thTo);
+    const res = await fetch(`/api/history?${params}`);
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    this.setData(data.labels, data.series);
+  }
+
+  cyclePoll() {
+    const steps = [0, 5, 10, 30];
+    const cur   = steps.indexOf(this._pollSecs);
+    this._pollSecs = steps[(cur + 1) % steps.length];
+    if (this._pollTimer) { clearInterval(this._pollTimer); this._pollTimer = null; }
+    if (this._pollSecs > 0) {
+      this._pollTimer = setInterval(() => this.fetch(), this._pollSecs * 1000);
+    }
+    this._updatePollBtn();
+    saveState();
+  }
+
+  _updatePollBtn() {
+    const btn = this.el?.querySelector('.slot-btn-poll');
+    if (!btn) return;
+    btn.textContent = this._pollSecs > 0 ? `Auto ${this._pollSecs}s ◼` : 'Auto ▸';
+    btn.classList.toggle('poll-active', this._pollSecs > 0);
   }
 
   initChart() {
@@ -198,20 +269,24 @@ class Slot {
   }
 
   clear() {
-    this.selectedKeys = [];
+    this.selectedKeys  = [];
+    this._assignedKeys = [];
+    this.chartId       = null;
+    if (this._pollTimer) { clearInterval(this._pollTimer); this._pollTimer = null; }
+    this._pollSecs = 0;
+    this._updatePollBtn();
     this._updateVarsLabel();
     this.echart?.setOption(_emptyOption(), true);
     saveState();
   }
 
   _updateVarsLabel() {
-    const el = this.el?.querySelector(`#slot-vars-${this.idx}`);
+    const el   = this.el?.querySelector(`#slot-vars-${this.idx}`);
     if (!el) return;
-    if (!this.selectedKeys.length) {
-      el.textContent = 'No variables selected';
-      return;
-    }
-    el.textContent = this.selectedKeys.map(k => VAR_MAP[k]?.label ?? k).join(', ');
+    const keys = this._assignedKeys.length ? this._assignedKeys : this.selectedKeys;
+    el.textContent = keys.length
+      ? keys.map(k => VAR_MAP[k]?.label ?? k).join(', ')
+      : 'No variables assigned';
   }
 }
 
@@ -244,20 +319,26 @@ function addSlot() {
   setActiveSlot(idx);
 }
 
-function removeSlot(idx) {
+async function removeSlot(idx) {
   const slot = _slots[idx];
   if (!slot) return;
+
+  if (slot.chartId && _selectedSid) {
+    try {
+      await fetch(`/api/sessions/${_selectedSid}/charts/${slot.chartId}`, { method: 'DELETE' });
+    } catch (_) {}
+  }
+
+  if (slot._pollTimer) clearInterval(slot._pollTimer);
   slot.echart?.dispose();
   slot.el?.remove();
   _slots.splice(idx, 1);
-  // Renumber remaining slots
   _slots.forEach((s, i) => {
     s.idx = i;
     s.el.dataset.slotIdx = i;
-    s.el.querySelector('.slot-title').textContent = `Chart ${i + 1}`;
+    if (!s.chartId) s.el.querySelector('.slot-title').textContent = `Chart ${i + 1}`;
   });
-  if (_slots.length === 0) addSlot();
-  else setActiveSlot(Math.min(_activeSlotIdx, _slots.length - 1));
+  setActiveSlot(Math.min(_activeSlotIdx, Math.max(0, _slots.length - 1)));
   saveState();
 }
 
@@ -336,6 +417,8 @@ function onSessionChange() {
   const sel = document.getElementById('session-select');
   _selectedSid = sel.value ? parseInt(sel.value) : null;
   saveState();
+  updateCaptureUI();
+  if (_selectedSid) loadSessionCharts(_selectedSid);
   const session = _sessions.find(s => s.id === _selectedSid);
 
   const metaEl  = document.getElementById('session-meta');
@@ -359,6 +442,34 @@ function onSessionChange() {
   delBtn.disabled = false;
 }
 
+async function loadSessionCharts(sessionId) {
+  try {
+    const res = await fetch(`/api/sessions/${sessionId}/charts`);
+    if (!res.ok) return;
+    const charts = await res.json();
+
+    // Dispose and clear all current slots
+    _slots.forEach(s => {
+      if (s._pollTimer) clearInterval(s._pollTimer);
+      s.echart?.dispose();
+      s.el?.remove();
+    });
+    _slots = [];
+    _activeSlotIdx = 0;
+
+    if (charts.length === 0) { return; }
+
+    for (const chart of charts) {
+      addSlot();
+      const slot = _slots[_slots.length - 1];
+      slot.bindChart(chart);
+      slot.fetch();  // auto-fetch on session load
+    }
+  } catch (e) {
+    console.error('[analytics] failed to load session charts:', e);
+  }
+}
+
 async function loadCaptureStatus() {
   try {
     const res  = await fetch('/api/capture/status');
@@ -371,34 +482,78 @@ async function loadCaptureStatus() {
 }
 
 function updateCaptureUI() {
-  const dot   = document.getElementById('capture-dot');
-  const label = document.getElementById('capture-label');
-  const start = document.getElementById('btn-start-capture');
-  const stop  = document.getElementById('btn-stop-capture');
-  const nameInput = document.getElementById('capture-name');
+  const dot        = document.getElementById('capture-dot');
+  const label      = document.getElementById('capture-label');
+  const varsLabel  = document.getElementById('capture-vars-label');
+  const start      = document.getElementById('btn-start-capture');
+  const stop       = document.getElementById('btn-stop-capture');
+  const newSession = document.getElementById('btn-new-session');
+  const nameInput  = document.getElementById('capture-name');
 
   if (_activeCapture) {
     dot.className = 'dot dot-active';
     label.textContent = `recording: ${_activeCapture.session?.name ?? ''}`;
+    const charts = _activeCapture.charts ?? [];
+    const allVars = [...new Set(charts.flatMap(c => c.selected_vars || []))];
+    if (varsLabel) varsLabel.textContent = allVars.map(k => VAR_MAP[k]?.label ?? k).join(', ');
     start.disabled = true;
     stop.disabled  = false;
+    if (newSession) newSession.disabled = true;
     nameInput.disabled = true;
   } else {
     dot.className = 'dot dot-idle';
     label.textContent = 'idle';
-    start.disabled = false;
+    if (varsLabel) varsLabel.textContent = '';
+    start.disabled = !_selectedSid;
     stop.disabled  = true;
+    if (newSession) newSession.disabled = false;
     nameInput.disabled = false;
   }
 }
 
-async function startCapture() {
+async function createSession() {
   const name = document.getElementById('capture-name').value.trim();
-  if (!name) { alert('Enter a session name before starting.'); return; }
-  const res = await fetch('/api/capture/start', {
+  if (!name) { alert('Enter a session name first.'); return; }
+  const res = await fetch('/api/sessions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name }),
+  });
+  if (!res.ok) { alert(await res.text()); return; }
+  const data = await res.json();
+  await loadSessions();
+  const sel = document.getElementById('session-select');
+  sel.value = String(data.session_id);
+  onSessionChange();
+}
+
+async function addCapture() {
+  if (!_selectedSid) { alert('Create or select a session first.'); return; }
+  const keys = getSelectedVarKeys();
+  if (!keys.length) { alert('Select at least one variable in the picker.'); return; }
+  const label = `Chart ${_slots.length + 1}`;
+  const res = await fetch(`/api/sessions/${_selectedSid}/charts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ label, selected_vars: keys }),
+  });
+  if (!res.ok) { alert(await res.text()); return; }
+  const chart = await res.json();
+  addSlot();
+  const slot = _slots[_slots.length - 1];
+  slot.bindChart(chart);
+}
+
+async function startCapture() {
+  if (!_selectedSid) { alert('Create or select a session first.'); return; }
+  if (!_slots.some(s => s.chartId)) {
+    alert('Add at least one capture before starting recording.\n\nSelect variables in the picker and click "+ Add capture".');
+    return;
+  }
+  const res = await fetch('/api/capture/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: _selectedSid }),
   });
   if (!res.ok) { alert(await res.text()); return; }
   await loadCaptureStatus();
@@ -449,44 +604,6 @@ function _loadSavedState() {
   } catch (_) { return null; }
 }
 
-// ── Query ────────────────────────────────────────────────────────────────────
-
-async function _querySlot(slot, varKeys, sessionId, thFrom, thTo) {
-  const params = new URLSearchParams({ session_id: sessionId, vars: varKeys.join(',') });
-  if (thFrom) params.set('from_th', thFrom);
-  if (thTo)   params.set('to_th',   thTo);
-  const res = await fetch(`/api/history?${params}`);
-  if (!res.ok) throw new Error(await res.text());
-  const data = await res.json();
-  slot.setData(data.labels, data.series);
-}
-
-async function queryActiveSlot() {
-  if (!_selectedSid) { alert('Select a session first.'); return; }
-  const varKeys = getSelectedVarKeys();
-  if (!varKeys.length) { alert('Select at least one variable.'); return; }
-
-  const slot = _slots[_activeSlotIdx];
-  if (!slot) return;
-
-  const thFrom = document.getElementById('th-from').value;
-  const thTo   = document.getElementById('th-to').value;
-
-  const btn = document.getElementById('btn-query');
-  btn.textContent = '…';
-  btn.disabled = true;
-
-  try {
-    await _querySlot(slot, varKeys, _selectedSid, thFrom, thTo);
-    saveState();
-  } catch (e) {
-    alert('Query failed: ' + e.message);
-  } finally {
-    btn.textContent = 'Query selected chart';
-    btn.disabled = false;
-  }
-}
-
 // ── Init ─────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -494,7 +611,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   buildVarPicker();
 
-  // Restore var picker selection before building slots
+  // Restore var picker selection
   if (saved?.selectedVarKeys?.length) {
     saved.selectedVarKeys.forEach(key => {
       const cb = document.querySelector(`#var-picker input[data-key="${key}"]`);
@@ -509,46 +626,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadSessions();
   await loadCaptureStatus();
 
-  // Restore session selection (must happen after loadSessions so the option exists)
+  // Restore session — loadSessionCharts is called inside onSessionChange
   if (saved?.selectedSid) {
     const sel = document.getElementById('session-select');
     sel.value = String(saved.selectedSid);
     onSessionChange();
   }
 
-  // Restore slots: first slot was already added by addSlot() above — but we haven't called it yet
-  const slotCount = saved?.slots?.length ?? 1;
-  for (let i = 0; i < slotCount; i++) addSlot();
-
-  // Re-query slots that had data
-  if (saved?.slots?.length && _selectedSid) {
-    const thFrom = document.getElementById('th-from').value;
-    const thTo   = document.getElementById('th-to').value;
-    for (let i = 0; i < saved.slots.length; i++) {
-      const keys = saved.slots[i]?.selectedKeys;
-      if (keys?.length && _slots[i]) {
-        _querySlot(_slots[i], keys, _selectedSid, thFrom, thTo).catch(() => {});
-      }
-    }
-  }
-
   document.getElementById('session-select').addEventListener('change', onSessionChange);
   document.getElementById('btn-refresh-sessions').addEventListener('click', loadSessions);
   document.getElementById('btn-export-session').addEventListener('click', exportSession);
   document.getElementById('btn-delete-session').addEventListener('click', deleteSession);
+  document.getElementById('btn-new-session').addEventListener('click', createSession);
   document.getElementById('btn-start-capture').addEventListener('click', startCapture);
   document.getElementById('btn-stop-capture').addEventListener('click', stopCapture);
-  document.getElementById('btn-add-slot').addEventListener('click', addSlot);
-  document.getElementById('btn-query').addEventListener('click', queryActiveSlot);
+  document.getElementById('btn-add-slot').addEventListener('click', addCapture);
+  document.getElementById('btn-add-capture').addEventListener('click', addCapture);
 
-  // Save state when time range changes
   document.getElementById('th-from').addEventListener('change', saveState);
   document.getElementById('th-to').addEventListener('change',   saveState);
-
-  // Poll capture status every 5 seconds to reflect state if changed via IHM
-  setInterval(loadCaptureStatus, 5000);
-  // Refresh session list every 10 seconds when a capture is active
-  setInterval(async () => {
-    if (_activeCapture) await loadSessions();
-  }, 10000);
 });

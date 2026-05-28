@@ -561,20 +561,51 @@ async def capture_status():
     if sid is None:
         return {"active": False, "session_id": None}
     session = persistence.get_session(sid)
-    return {"active": True, "session_id": sid, "session": session}
+    charts  = persistence.list_chart_captures(sid)
+    return {"active": True, "session_id": sid, "session": session, "charts": charts}
 
 
-@app.post("/api/capture/start")
-async def capture_start(payload: dict):
+@app.post("/api/sessions")
+async def session_create(payload: dict):
     name = (payload.get("name") or "").strip()
     if not name:
         return Response("name is required", status_code=400, media_type="text/plain")
     description = (payload.get("description") or "").strip()
+    sid = persistence.create_session(name, description)
+    print(f"[ihm] session created: {sid} — '{name}'")
+    return {"status": "ok", "session_id": sid}
+
+
+@app.post("/api/sessions/{session_id}/charts")
+async def session_add_chart(session_id: int, payload: dict):
+    label         = (payload.get("label") or "Chart").strip()
+    selected_vars = payload.get("selected_vars") or []
+    if not selected_vars:
+        return Response("selected_vars is required", status_code=400, media_type="text/plain")
+    chart = persistence.add_chart_capture(session_id, label, selected_vars)
+    return chart
+
+
+@app.delete("/api/sessions/{session_id}/charts/{chart_id}")
+async def session_delete_chart(session_id: int, chart_id: int):
+    ok = persistence.remove_chart_capture(chart_id)
+    if not ok:
+        return Response("chart not found", status_code=404, media_type="text/plain")
+    return {"status": "ok", "chart_id": chart_id}
+
+
+@app.post("/api/capture/start")
+async def capture_start(payload: dict):
+    session_id = payload.get("session_id")
+    if session_id is None:
+        return Response("session_id is required", status_code=400, media_type="text/plain")
     if persistence.active_session_id() is not None:
         return Response("a capture session is already active", status_code=409, media_type="text/plain")
-    sid = persistence.start_session(name, description)
-    print(f"[ihm] capture session started: {sid} — '{name}'")
-    return {"status": "ok", "session_id": sid}
+    ok = persistence.start_recording(int(session_id))
+    if not ok:
+        return Response("session has no charts or does not exist", status_code=400, media_type="text/plain")
+    print(f"[ihm] capture started: {session_id}")
+    return {"status": "ok", "session_id": session_id}
 
 
 @app.post("/api/capture/stop")
@@ -582,7 +613,7 @@ async def capture_stop():
     sid = persistence.stop_session()
     if sid is None:
         return Response("no active session", status_code=404, media_type="text/plain")
-    print(f"[ihm] capture session stopped: {sid}")
+    print(f"[ihm] capture stopped: {sid}")
     return {"status": "ok", "session_id": sid}
 
 
@@ -599,17 +630,20 @@ async def session_get(session_id: int):
     return s
 
 
+@app.get("/api/sessions/{session_id}/charts")
+async def session_charts(session_id: int):
+    return persistence.list_chart_captures(session_id)
+
+
 @app.get("/api/history")
 async def history_query(
-    session_id: int,
-    vars: str = "",
+    chart_id: int,
     from_th: Optional[float] = None,
     to_th: Optional[float] = None,
 ):
-    var_keys = [v.strip() for v in vars.split(",") if v.strip()] if vars else []
-    if not var_keys:
-        return Response("vars param required (e.g. vars=xmeas_7,xmv_10)", status_code=400, media_type="text/plain")
-    data = persistence.query_history(session_id, var_keys, from_th, to_th)
+    data = persistence.query_history(chart_id, from_th, to_th)
+    if data is None:
+        return Response("chart not found", status_code=404, media_type="text/plain")
     return data
 
 
