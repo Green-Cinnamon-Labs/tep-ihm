@@ -201,6 +201,7 @@ class Slot {
     this.selectedKeys = [];
     this._updateVarsLabel();
     this.echart?.setOption(_emptyOption(), true);
+    saveState();
   }
 
   _updateVarsLabel() {
@@ -257,6 +258,7 @@ function removeSlot(idx) {
   });
   if (_slots.length === 0) addSlot();
   else setActiveSlot(Math.min(_activeSlotIdx, _slots.length - 1));
+  saveState();
 }
 
 function setActiveSlot(idx) {
@@ -333,6 +335,7 @@ function renderSessionSelect() {
 function onSessionChange() {
   const sel = document.getElementById('session-select');
   _selectedSid = sel.value ? parseInt(sel.value) : null;
+  saveState();
   const session = _sessions.find(s => s.id === _selectedSid);
 
   const metaEl  = document.getElementById('session-meta');
@@ -423,7 +426,40 @@ async function deleteSession() {
   await loadSessions();
 }
 
+// ── State persistence ─────────────────────────────────────────────────────────
+
+const _STORAGE_KEY = 'tep_analytics_v1';
+
+function saveState() {
+  try {
+    localStorage.setItem(_STORAGE_KEY, JSON.stringify({
+      selectedSid:     _selectedSid,
+      selectedVarKeys: getSelectedVarKeys(),
+      thFrom:          document.getElementById('th-from')?.value ?? '',
+      thTo:            document.getElementById('th-to')?.value   ?? '',
+      slots:           _slots.map(s => ({ selectedKeys: s.selectedKeys })),
+    }));
+  } catch (_) {}
+}
+
+function _loadSavedState() {
+  try {
+    const raw = localStorage.getItem(_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) { return null; }
+}
+
 // ── Query ────────────────────────────────────────────────────────────────────
+
+async function _querySlot(slot, varKeys, sessionId, thFrom, thTo) {
+  const params = new URLSearchParams({ session_id: sessionId, vars: varKeys.join(',') });
+  if (thFrom) params.set('from_th', thFrom);
+  if (thTo)   params.set('to_th',   thTo);
+  const res = await fetch(`/api/history?${params}`);
+  if (!res.ok) throw new Error(await res.text());
+  const data = await res.json();
+  slot.setData(data.labels, data.series);
+}
 
 async function queryActiveSlot() {
   if (!_selectedSid) { alert('Select a session first.'); return; }
@@ -436,19 +472,13 @@ async function queryActiveSlot() {
   const thFrom = document.getElementById('th-from').value;
   const thTo   = document.getElementById('th-to').value;
 
-  const params = new URLSearchParams({ session_id: _selectedSid, vars: varKeys.join(',') });
-  if (thFrom) params.set('from_th', thFrom);
-  if (thTo)   params.set('to_th',   thTo);
-
   const btn = document.getElementById('btn-query');
   btn.textContent = '…';
   btn.disabled = true;
 
   try {
-    const res  = await fetch(`/api/history?${params}`);
-    if (!res.ok) { alert(await res.text()); return; }
-    const data = await res.json();
-    slot.setData(data.labels, data.series);
+    await _querySlot(slot, varKeys, _selectedSid, thFrom, thTo);
+    saveState();
   } catch (e) {
     alert('Query failed: ' + e.message);
   } finally {
@@ -460,11 +490,47 @@ async function queryActiveSlot() {
 // ── Init ─────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', async () => {
+  const saved = _loadSavedState();
+
   buildVarPicker();
-  addSlot();
+
+  // Restore var picker selection before building slots
+  if (saved?.selectedVarKeys?.length) {
+    saved.selectedVarKeys.forEach(key => {
+      const cb = document.querySelector(`#var-picker input[data-key="${key}"]`);
+      if (cb) cb.checked = true;
+    });
+  }
+
+  // Restore time range
+  if (saved?.thFrom) document.getElementById('th-from').value = saved.thFrom;
+  if (saved?.thTo)   document.getElementById('th-to').value   = saved.thTo;
 
   await loadSessions();
   await loadCaptureStatus();
+
+  // Restore session selection (must happen after loadSessions so the option exists)
+  if (saved?.selectedSid) {
+    const sel = document.getElementById('session-select');
+    sel.value = String(saved.selectedSid);
+    onSessionChange();
+  }
+
+  // Restore slots: first slot was already added by addSlot() above — but we haven't called it yet
+  const slotCount = saved?.slots?.length ?? 1;
+  for (let i = 0; i < slotCount; i++) addSlot();
+
+  // Re-query slots that had data
+  if (saved?.slots?.length && _selectedSid) {
+    const thFrom = document.getElementById('th-from').value;
+    const thTo   = document.getElementById('th-to').value;
+    for (let i = 0; i < saved.slots.length; i++) {
+      const keys = saved.slots[i]?.selectedKeys;
+      if (keys?.length && _slots[i]) {
+        _querySlot(_slots[i], keys, _selectedSid, thFrom, thTo).catch(() => {});
+      }
+    }
+  }
 
   document.getElementById('session-select').addEventListener('change', onSessionChange);
   document.getElementById('btn-refresh-sessions').addEventListener('click', loadSessions);
@@ -474,6 +540,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btn-stop-capture').addEventListener('click', stopCapture);
   document.getElementById('btn-add-slot').addEventListener('click', addSlot);
   document.getElementById('btn-query').addEventListener('click', queryActiveSlot);
+
+  // Save state when time range changes
+  document.getElementById('th-from').addEventListener('change', saveState);
+  document.getElementById('th-to').addEventListener('change',   saveState);
 
   // Poll capture status every 5 seconds to reflect state if changed via IHM
   setInterval(loadCaptureStatus, 5000);
