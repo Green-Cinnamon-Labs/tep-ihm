@@ -289,7 +289,8 @@ class SVGControlChart {
         this._connectors  = {};   // key → <line> liga rastro à barra
         this._barTracks   = {};   // key → <rect> track
         this._barFills    = {};   // key → <rect> fill
-        this._maxEls      = {};   // key → <line> marca de máximo (se showMax)
+        this._statPolys   = {};   // key → { max, mean, min } <polygon> triângulos (opt-in: showStats)
+        this._statConns   = {};   // key → { max, mean, min } <line> conectores
         this._barValues   = {};   // key → <text> valor atual
         this._tooltipEl   = null;
         this._titleEl     = null;
@@ -343,13 +344,25 @@ class SVGControlChart {
             svg.appendChild(fill);
             this._barFills[s.key] = fill;
 
-            // Marca de máximo (opcional — declarada por série via showMax: true)
-            if (s.showMax) {
-                const mx = document.createElementNS(NS, 'line');
-                mx.setAttribute('class', 'chart-bar-max');
-                mx.style.stroke = s.color;
-                svg.appendChild(mx);
-                this._maxEls[s.key] = mx;
+            // Indicadores de nível (triângulo + conector) — apenas se showStats: true
+            if (s.showStats) {
+                const STAT_COLORS = { max: '#ef5350', mean: '#78909c', min: '#b0bec5' };
+                const polys = {}, conns = {};
+                ['max', 'mean', 'min'].forEach(type => {
+                    const poly = document.createElementNS(NS, 'polygon');
+                    poly.setAttribute('class', `chart-stat-tri chart-stat-${type}`);
+                    poly.style.fill = STAT_COLORS[type];
+                    svg.appendChild(poly);
+                    polys[type] = poly;
+
+                    const ln = document.createElementNS(NS, 'line');
+                    ln.setAttribute('class', `chart-stat-conn chart-stat-${type}-conn`);
+                    ln.style.stroke = STAT_COLORS[type];
+                    svg.appendChild(ln);
+                    conns[type] = ln;
+                });
+                this._statPolys[s.key] = polys;
+                this._statConns[s.key] = conns;
             }
 
             // Valor atual
@@ -371,9 +384,14 @@ class SVGControlChart {
             const lines = this.series.map(s => {
                 const buf  = this._buffers[s.key];
                 const last = buf.length ? buf[buf.length - 1] : null;
-                const val  = last != null ? (last < 10 ? last.toFixed(2) : last.toFixed(1)) : '—';
+                const mn   = buf.length ? Math.min(...buf) : null;
+                const mx   = buf.length ? Math.max(...buf) : null;
+                const mean = buf.length ? buf.reduce((a, b) => a + b, 0) / buf.length : null;
+                const fmt  = v => v == null ? '—' : (v < 10 ? v.toFixed(2) : v.toFixed(1));
                 const unit = s.unit ? ` ${s.unit}` : '';
-                return `<span style="color:${s.color}">■</span> ${s.label || s.key}: <b>${val}${unit}</b>`;
+                return `<span style="color:${s.color}">■</span> ${s.label || s.key}: <b>${fmt(last)}${unit}</b>` +
+                       `<br><small style="color:#aaa;padding-left:14px">` +
+                       `min ${fmt(mn)} · avg ${fmt(mean)} · max ${fmt(mx)}${unit}</small>`;
             }).join('<br>');
             tip.innerHTML = lines;
             tip.style.display = 'block';
@@ -543,19 +561,46 @@ class SVGControlChart {
                 }
             }
 
-            // Marca de máximo atravessando a barra (apenas se showMax: true na série)
-            const mxEl = this._maxEls[s.key];
-            if (mxEl) {
-                if (buf.length > 0) {
-                    const mxY = toY(Math.max(...buf)).toFixed(1);
-                    mxEl.setAttribute('x1', barX.toFixed(1));
-                    mxEl.setAttribute('y1', mxY);
-                    mxEl.setAttribute('x2', (barX + BAR_W).toFixed(1));
-                    mxEl.setAttribute('y2', mxY);
-                    mxEl.style.display = '';
-                } else {
-                    mxEl.style.display = 'none';
-                }
+            // Triângulos indicadores de nível (showStats: true)
+            const polys = this._statPolys[s.key];
+            const conns = this._statConns[s.key];
+            if (polys && buf.length) {
+                const bufMin  = Math.min(...buf);
+                const bufMax  = Math.max(...buf);
+                const bufMean = buf.reduce((a, b) => a + b, 0) / buf.length;
+
+                const TRI_W = 13;  // profundidade do triângulo
+                const TRI_H = 8;   // meia-altura do triângulo
+                const GAP   = 3;   // gap entre ponta e borda da barra
+
+                // barSide right → triângulo à esquerda, ponta apontando para direita (►)
+                // barSide left  → triângulo à direita, ponta apontando para esquerda (◄)
+                const tipX    = left ? barX + BAR_W + GAP : barX - GAP;
+                const baseX   = left ? tipX + TRI_W       : tipX - TRI_W;
+                const barEdge = left ? barX + BAR_W        : barX;
+
+                [['max', bufMax], ['mean', bufMean], ['min', bufMin]].forEach(([type, val]) => {
+                    const poly = polys[type];
+                    const conn = conns[type];
+                    if (!poly) return;
+                    const midY = toY(val);
+                    poly.setAttribute('points',
+                        `${baseX},${(midY - TRI_H).toFixed(1)} ` +
+                        `${tipX},${midY.toFixed(1)} ` +
+                        `${baseX},${(midY + TRI_H).toFixed(1)}`
+                    );
+                    poly.style.display = '';
+                    if (conn) {
+                        conn.setAttribute('x1', tipX.toFixed(1));
+                        conn.setAttribute('y1', midY.toFixed(1));
+                        conn.setAttribute('x2', barEdge.toFixed(1));
+                        conn.setAttribute('y2', midY.toFixed(1));
+                        conn.style.display = '';
+                    }
+                });
+            } else if (polys) {
+                Object.values(polys).forEach(p => { p.style.display = 'none'; });
+                if (conns) Object.values(conns).forEach(c => { c.style.display = 'none'; });
             }
 
         });

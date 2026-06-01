@@ -698,9 +698,18 @@ main {
     opacity: 0.5;
 }
 
-.svg-control-chart .chart-bar-max {
-    stroke-width: 2;
+.svg-control-chart .chart-stat-tri {
     opacity: 0.9;
+    pointer-events: none;
+}
+.svg-control-chart .chart-stat-mean { opacity: 0.65; }
+.svg-control-chart .chart-stat-min  { opacity: 0.45; }
+
+.svg-control-chart .chart-stat-conn {
+    stroke-width: 1;
+    stroke-dasharray: 3 2;
+    opacity: 0.5;
+    pointer-events: none;
 }
 
 
