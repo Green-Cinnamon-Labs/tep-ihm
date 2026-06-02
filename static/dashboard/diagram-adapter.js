@@ -303,6 +303,8 @@ class SVGControlChart {
         this.barSide    = barSide;
 
         this._buffers     = Object.fromEntries(series.map(s => [s.key, []]));
+        this._histMin     = Object.fromEntries(series.map(s => [s.key,  Infinity]));
+        this._histMax     = Object.fromEntries(series.map(s => [s.key, -Infinity]));
         this._svgEl       = null;
         this._paths       = {};   // key → <path> rastro suave
         this._connectors  = {};   // key → <line> liga rastro à barra
@@ -417,14 +419,14 @@ class SVGControlChart {
             const lines = this.series.map(s => {
                 const buf  = this._buffers[s.key];
                 const last = buf.length ? buf[buf.length - 1] : null;
-                const mn   = buf.length ? Math.min(...buf) : null;
-                const mx   = buf.length ? Math.max(...buf) : null;
+                const mn   = this._histMin[s.key];
+                const mx   = this._histMax[s.key];
                 const mean = buf.length ? buf.reduce((a, b) => a + b, 0) / buf.length : null;
-                const fmt  = v => v == null ? '—' : (v < 10 ? v.toFixed(2) : v.toFixed(1));
+                const fmt  = v => (v == null || !isFinite(v)) ? '—' : (Math.abs(v) < 10 ? v.toFixed(2) : v.toFixed(1));
                 const unit = s.unit ? ` ${s.unit}` : '';
                 return `<span style="color:${s.color}">■</span> ${s.label || s.key}: <b>${fmt(last)}${unit}</b>` +
                        `<br><small style="color:#aaa;padding-left:14px">` +
-                       `min ${fmt(mn)} · avg ${fmt(mean)} · max ${fmt(mx)}${unit}</small>`;
+                       `hist.min ${fmt(mn)} · avg ${fmt(mean)} · hist.max ${fmt(mx)}${unit}</small>`;
             }).join('<br>');
             tip.innerHTML = lines;
             tip.style.display = 'block';
@@ -461,6 +463,8 @@ class SVGControlChart {
         if (!buf) return;
         buf.push(value);
         if (buf.length > this.bufferSize) buf.shift();
+        if (value < this._histMin[key]) this._histMin[key] = value;
+        if (value > this._histMax[key]) this._histMax[key] = value;
         this._reposition();
     }
 
@@ -602,8 +606,8 @@ class SVGControlChart {
             const polys = this._statPolys[s.key];
             const conns = this._statConns[s.key];
             if (polys && buf.length) {
-                const bufMin  = Math.min(...buf);
-                const bufMax  = Math.max(...buf);
+                const bufMin  = this._histMin[s.key];
+                const bufMax  = this._histMax[s.key];
                 const bufMean = buf.reduce((a, b) => a + b, 0) / buf.length;
 
                 const TRI_W = 13;  // profundidade do triângulo

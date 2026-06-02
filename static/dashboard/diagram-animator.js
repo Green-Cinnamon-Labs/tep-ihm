@@ -274,7 +274,7 @@ function initControlCharts(container) {
 
     C('separator-level', {
         id: 'ctrl-separator-level', anchor: 'chart-separator-level',
-        title: 'Nível Separador', bufferSize: 15, barSide: 'right',
+        title: 'Nível Separador', bufferSize: 15, barSide: 'left',
         tep: 'XMEAS(12) nível do separador vs XMV(7) válvula de underflow. Nível acumulando sem resposta indica falha de controle de inventário.',
         series: [
             { key: 'xmeas_12', label: 'Nível Separador',   unit: '%', color: '#1565c0', min: 0, max: 100, showStats: true },
