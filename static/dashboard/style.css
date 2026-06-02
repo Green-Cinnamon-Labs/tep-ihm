@@ -612,9 +612,9 @@ main {
 /* ── SVGControlChart overlay — ISA-101: embutido, sem card ───────────────────── */
 
 .svg-control-chart .chart-bg {
-    fill: var(--hmi-bg);
+    fill: #f0f4f7;
     stroke: none;
-    opacity: 0.92;
+    opacity: 0.75;
 }
 
 .svg-control-chart .chart-trace {
@@ -709,6 +709,20 @@ main {
     stroke-width: 1;
     stroke-dasharray: 3 2;
     opacity: 0.5;
+    pointer-events: none;
+}
+.svg-control-chart .chart-grid-line {
+    stroke: #667;
+    stroke-width: 0.7;
+    stroke-dasharray: 4 3;
+    opacity: 0.45;
+    pointer-events: none;
+}
+.svg-control-chart .chart-grid-label {
+    font-size: 9px;
+    fill: #4a5260;
+    font-family: monospace;
+    font-weight: 600;
     pointer-events: none;
 }
 

@@ -254,7 +254,7 @@ function initControlCharts(container) {
 
     C('reactor-temp', {
         id: 'ctrl-reactor-temp', anchor: 'chart-reactor-temp',
-        title: 'Temp. Reator', bufferSize: 60,
+        title: 'Temp. Reator', bufferSize: 15,
         tep: 'XMEAS(9) temperatura do reator vs XMV(10) fluxo de CWS. Alta temperatura indica sobrecarga exotérmica; XMV(10) deve abrir para compensar.',
         series: [
             { key: 'xmeas_9', label: 'Temperatura Reator',   unit: '°C', color: '#1565c0', min: 80,  max: 170, showStats: true },
@@ -264,7 +264,7 @@ function initControlCharts(container) {
 
     C('reactor-press', {
         id: 'ctrl-reactor-press', anchor: 'chart-reactor-press',
-        title: 'Pressão Reator', bufferSize: 60, 
+        title: 'Pressão Reator', bufferSize: 15, 
         tep: 'XMEAS(7) pressão do reator vs XMV(6) válvula de purga. Pressão alta indica acúmulo de inertes; purga deve abrir para aliviar.',
         series: [
             { key: 'xmeas_7', label: 'Pressão Reator',   unit: 'kPa', color: '#1565c0', min: 2400, max: 3200, showStats: true },
@@ -274,7 +274,7 @@ function initControlCharts(container) {
 
     C('separator-level', {
         id: 'ctrl-separator-level', anchor: 'chart-separator-level',
-        title: 'Nível Separador', bufferSize: 60, barSide: 'right',
+        title: 'Nível Separador', bufferSize: 15, barSide: 'right',
         tep: 'XMEAS(12) nível do separador vs XMV(7) válvula de underflow. Nível acumulando sem resposta indica falha de controle de inventário.',
         series: [
             { key: 'xmeas_12', label: 'Nível Separador',   unit: '%', color: '#1565c0', min: 0, max: 100, showStats: true },
@@ -284,7 +284,7 @@ function initControlCharts(container) {
 
     C('stripper', {
         id: 'ctrl-stripper', anchor: 'chart-stripper',
-        title: 'Stripper', bufferSize: 60, barSide: 'left',
+        title: 'Stripper', bufferSize: 15, barSide: 'left',
         tep: 'XMEAS(15) nível, XMV(8) saída de produto e XMEAS(18) temperatura do stripper. As três juntas descrevem o estado operacional da coluna.',
         series: [
             { key: 'xmeas_15', label: 'Nível',  unit: '%',  color: '#ce93d8', min: 0,  max: 100, showStats: true },
@@ -295,7 +295,7 @@ function initControlCharts(container) {
 
     C('recycle-purge', {
         id: 'ctrl-recycle-purge', anchor: 'chart-recycle-purge',
-        title: 'Purge Balance', bufferSize: 60,
+        title: 'Purge Balance', bufferSize: 15,
         tep: 'XMV(6) válvula de purga e razão Purga/Reciclo %. Válvula abre → purga sobe → razão aumenta → inertes reduzem.',
         series: [
             { key: 'xmv_6',       label: 'Válvula de Purga',  unit: '%',  color: '#1565c0', min: 0, max: 100 },

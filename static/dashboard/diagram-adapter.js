@@ -273,8 +273,27 @@ function _smoothPath(pts) {
     return d + ` L ${lp.x.toFixed(1)} ${lp.y.toFixed(1)}`;
 }
 
+/**
+ * Retorna lo, hi e ticks em valores "bonitos" (1/2/5 × potência de 10).
+ * targetIntervals: número desejado de intervalos entre ticks.
+ */
+function _niceScale(lo, hi, targetIntervals) {
+    const range  = hi - lo || 1;
+    const rough  = range / Math.max(targetIntervals, 1);
+    const mag    = Math.pow(10, Math.floor(Math.log10(rough)));
+    const n      = rough / mag;
+    const step   = n <= 1 ? mag : n <= 2 ? 2 * mag : n <= 5 ? 5 * mag : 10 * mag;
+    const niceLo = Math.floor(lo / step) * step;
+    const niceHi = Math.ceil(hi / step) * step;
+    const ticks  = [];
+    for (let i = 0; niceLo + i * step <= niceHi + step * 0.001; i++) {
+        ticks.push(Math.round((niceLo + i * step) / step) * step);
+    }
+    return { lo: niceLo, hi: niceHi, step, ticks };
+}
+
 class SVGControlChart {
-    constructor({ id, anchor, bufferSize = 60, series = [], title = '', tep = '', barSide = 'right' }) {
+    constructor({ id, anchor, bufferSize = 15, series = [], title = '', tep = '', barSide = 'right' }) {
         this.id         = id;
         this.anchor     = anchor;
         this.bufferSize = bufferSize;
@@ -292,6 +311,7 @@ class SVGControlChart {
         this._statPolys   = {};   // key → { max, mean, min } <polygon> triângulos (opt-in: showStats)
         this._statConns   = {};   // key → { max, mean, min } <line> conectores
         this._barValues   = {};   // key → <text> valor atual
+        this._gridEls     = [];   // { line, label } × N_GRID — grade auto-escala
         this._tooltipEl   = null;
         this._titleEl     = null;
         this._container   = null;
@@ -313,6 +333,19 @@ class SVGControlChart {
         bg.setAttribute('height', '100%');
         bg.setAttribute('class', 'chart-bg');
         svg.appendChild(bg);
+
+        // Grade horizontal auto-escala (z-order: abaixo das séries)
+        const N_GRID = 4;
+        this._gridEls = [];
+        for (let g = 0; g < N_GRID; g++) {
+            const gl = document.createElementNS(NS, 'line');
+            gl.setAttribute('class', 'chart-grid-line');
+            svg.appendChild(gl);
+            const lbl = document.createElementNS(NS, 'text');
+            lbl.setAttribute('class', 'chart-grid-label');
+            svg.appendChild(lbl);
+            this._gridEls.push({ line: gl, label: lbl });
+        }
 
         // Por série (z-order: conector → rastro → track → fill → max → labels)
         this.series.forEach(s => {
@@ -480,12 +513,16 @@ class SVGControlChart {
             const buf  = this._buffers[s.key] || [];
             const barX = barsX + i * (BAR_W + BAR_GAP);
 
-            // Normalização por série: min/max fixo ou auto-scale do buffer
-            let lo = s.min, hi = s.max;
-            if (lo == null || hi == null) {
-                if (!buf.length) return;
-                lo = Math.min(...buf);
-                hi = Math.max(...buf);
+            // Escala: usa min/max fixo da série se declarado; nice-scale do buffer como fallback
+            if (!buf.length) return;
+            let lo, hi;
+            if (s.min != null && s.max != null) {
+                lo = s.min;
+                hi = s.max;
+            } else {
+                const bufMin = Math.min(...buf);
+                const bufMax = Math.max(...buf);
+                ({ lo, hi } = _niceScale(bufMin, bufMax, this._gridEls.length + 1));
             }
             const range = hi - lo || 1;
             const norm  = v => Math.max(0, Math.min(1, (v - lo) / range));
@@ -604,6 +641,45 @@ class SVGControlChart {
             }
 
         });
+
+        // Grade horizontal: mesma escala usada pela primeira série
+        const firstBuf = this._buffers[this.series[0]?.key] || [];
+        const s0 = this.series[0];
+        if (this._gridEls.length && firstBuf.length >= 1) {
+            const gLo0 = (s0?.min != null) ? s0.min : Math.min(...firstBuf);
+            const gHi0 = (s0?.max != null) ? s0.max : Math.max(...firstBuf);
+            const { lo: gLo, hi: gHi, step: gStep, ticks } =
+                _niceScale(gLo0, gHi0, this._gridEls.length + 1);
+            const gRange = gHi - gLo || 1;
+            const gToY   = v => PAD.t + (1 - (v - gLo) / gRange) * plotH;
+            // ticks interiores (excluí lo e hi que ficam nas bordas do plot)
+            const inner  = ticks.filter(t => t > gLo && t < gHi).slice(0, this._gridEls.length);
+            const dec    = gStep < 0.1 ? 3 : gStep < 1 ? 2 : gStep < 10 ? 1 : 0;
+            const labelX = (traceStartX + 2).toFixed(1);
+            this._gridEls.forEach(({ line, label }, idx) => {
+                if (idx < inner.length) {
+                    const val = inner[idx];
+                    const y   = gToY(val).toFixed(1);
+                    line.setAttribute('x1', traceStartX.toFixed(1));
+                    line.setAttribute('y1', y);
+                    line.setAttribute('x2', traceEndX.toFixed(1));
+                    line.setAttribute('y2', y);
+                    line.style.display = '';
+                    label.setAttribute('x', labelX);
+                    label.setAttribute('y', (parseFloat(y) - 2).toFixed(1));
+                    label.textContent = val.toFixed(dec);
+                    label.style.display = '';
+                } else {
+                    line.style.display  = 'none';
+                    label.style.display = 'none';
+                }
+            });
+        } else {
+            this._gridEls.forEach(({ line, label }) => {
+                line.style.display  = 'none';
+                label.style.display = 'none';
+            });
+        }
 
     }
 
