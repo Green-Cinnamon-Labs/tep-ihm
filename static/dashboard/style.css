@@ -846,6 +846,63 @@ main {
     border-color: #4a7aaf;
 }
 
+/* ── K8s Supervisor panel ───────────────────────────────────────────────────── */
+
+.supervisor-panel {
+    position: fixed;
+    bottom: 16px;
+    left: 16px;
+    width: 380px;
+    max-height: 420px;
+    background: #0d1b2a;
+    border: 1px solid #1e3a5f;
+    border-radius: 6px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    font-family: 'Consolas', monospace;
+    font-size: 11px;
+    color: #c8d8e8;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+.supervisor-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 10px;
+    background: #0a1628;
+    border-bottom: 1px solid #1e3a5f;
+    border-radius: 6px 6px 0 0;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: #7eb8e8;
+    cursor: grab;
+    user-select: none;
+}
+.supervisor-panel-body {
+    overflow-y: auto;
+    padding: 8px 10px;
+    flex: 1;
+}
+.sup-meta-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+.sup-meta-table td { padding: 2px 4px; }
+.sup-meta-table td:first-child { color: #6a8faf; width: 90px; }
+.sup-vars-label { color: #6a8faf; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; margin: 6px 0 3px; }
+.sup-vars-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+.sup-vars-table th { color: #4a7090; font-weight: 400; text-align: left; padding: 2px 4px; border-bottom: 1px solid #1e3a5f; }
+.sup-vars-table td { padding: 2px 4px; }
+.sup-vars-table tr:hover td { background: #0f2035; }
+
+/* Phase badge colours */
+.sup-stable   { color: #4caf50; }
+.sup-transient { color: #ffa726; }
+.sup-alarm    { color: #ef5350; font-weight: 700; }
+
+/* Button indicator via data attribute */
+#btn-supervisor[data-sup-phase="sup-stable"]   { border-color: #4caf50; }
+#btn-supervisor[data-sup-phase="sup-transient"] { border-color: #ffa726; }
+#btn-supervisor[data-sup-phase="sup-alarm"]    { border-color: #ef5350; }
+
 /* ── Demo terminal overlay ──────────────────────────────────────────────────── */
 
 .demo-panel {

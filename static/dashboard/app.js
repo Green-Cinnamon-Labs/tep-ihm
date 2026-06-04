@@ -171,14 +171,26 @@ const $opReconcile = document.getElementById('op-reconcile');
 const $opLastAction = document.getElementById('op-last-action');
 const $opVarsTbody = document.getElementById('op-vars-tbody');
 
+const _SUP_PHASE_CLS = { Stable: 'sup-stable', Transient: 'sup-transient', Alarm: 'sup-alarm', Shutdown: 'sup-alarm' };
+
 function renderOperator(op) {
+    const badge = document.getElementById('op-phase-badge');
+    const btn   = document.getElementById('btn-supervisor');
+
     if (!op) {
-        $opPhase.textContent = 'não conectado';
+        if ($opPhase) $opPhase.textContent = 'não conectado';
+        if (badge)    badge.textContent = 'offline';
+        if (btn)      btn.dataset.supPhase = '';
         return;
     }
 
-    $opPhase.textContent = op.phase || '--';
-    $opPhase.className = op.phase === 'Alarm' || op.phase === 'Shutdown' ? 'status-alarm' : '';
+    const phase = op.phase || 'Unknown';
+    const phaseCls = _SUP_PHASE_CLS[phase] || '';
+    if (badge) { badge.textContent = phase; badge.className = phaseCls; }
+    if (btn)   btn.dataset.supPhase = phaseCls;
+
+    $opPhase.textContent = phase;
+    $opPhase.className = phaseCls;
 
     $opTime.textContent = op.plantTime != null ? `${op.plantTime.toFixed(2)} h` : '--';
     $opIsd.textContent = op.isdActive ? 'SIM' : 'não';
@@ -333,6 +345,11 @@ function toggleConsolePanel() {
     _setPanel('console-panel', 'btn-console', !!panel?.hidden);
 }
 
+function toggleSupervisorPanel() {
+    const panel = document.getElementById('supervisor-panel');
+    _setPanel('supervisor-panel', 'btn-supervisor', !!panel?.hidden);
+}
+
 // ── Console intercept ────────────────────────────────────────────────────────
 
 function _consoleLog(msg, level = 'LOG') {
@@ -399,6 +416,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const idvPanel  = document.getElementById('idv-panel');
     const idvHandle = idvPanel?.querySelector('.idv-panel-header');
     if (idvPanel && idvHandle) makeDraggable(idvPanel, idvHandle);
+
+    const supPanel  = document.getElementById('supervisor-panel');
+    const supHandle = supPanel?.querySelector('.supervisor-panel-header');
+    if (supPanel && supHandle) makeDraggable(supPanel, supHandle);
 });
 
 // ── Update ───────────────────────────────────────────────────────────────────

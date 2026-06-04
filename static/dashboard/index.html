@@ -32,6 +32,7 @@
         </div>
         <button id="btn-idv" class="sim-control-btn" onclick="toggleIdvPanel()" title="Painel de distúrbios IDV">⚡ IDV</button>
         <button id="btn-console" class="sim-control-btn" onclick="toggleConsolePanel()" title="Console de logs">▣ Console</button>
+        <button id="btn-supervisor" class="sim-control-btn" onclick="toggleSupervisorPanel()" title="Status do operador Kubernetes">⬡ K8s Supervisor</button>
         <a href="/analytics" class="sim-control-btn" style="text-decoration:none" title="Painel analítico — séries temporais">📈 Analytics</a>
     </header>
 
@@ -42,6 +43,28 @@
             <button onclick="_setPanel('idv-panel','btn-idv',false)" class="idv-panel-close">✕</button>
         </div>
         <div id="idv-list" class="idv-panel-body"></div>
+    </div>
+
+    <!-- K8s Supervisor panel -->
+    <div id="supervisor-panel" class="supervisor-panel" hidden>
+        <div class="supervisor-panel-header">
+            <span>⬡ K8S SUPERVISOR — <span id="op-phase-badge">--</span></span>
+            <button onclick="_setPanel('supervisor-panel','btn-supervisor',false)" class="demo-close">✕</button>
+        </div>
+        <div class="supervisor-panel-body">
+            <table class="sup-meta-table">
+                <tr><td>Phase</td>     <td id="op-phase">--</td></tr>
+                <tr><td>Plant t</td>   <td id="op-time">--</td></tr>
+                <tr><td>ISD</td>       <td id="op-isd">--</td></tr>
+                <tr><td>Reconcile</td> <td id="op-reconcile">--</td></tr>
+                <tr><td>Last action</td><td id="op-last-action">--</td></tr>
+            </table>
+            <div class="sup-vars-label">Variáveis monitoradas</div>
+            <table class="sup-vars-table">
+                <thead><tr><th>Nome</th><th>Tag</th><th>Valor</th><th>Estado</th><th>Trend</th></tr></thead>
+                <tbody id="op-vars-tbody"></tbody>
+            </table>
+        </div>
     </div>
 
     <!-- Console panel -->
@@ -90,16 +113,7 @@
             <table id="xmeas-table"><tbody></tbody></table>
             <table id="xmv-table"><tbody></tbody></table>
             <div id="_idv-list-placeholder" style="display:none"></div>
-            <div id="operator-content">
-                <table id="operator-meta-table">
-                    <tr><td></td><td id="op-phase"></td></tr>
-                    <tr><td></td><td id="op-time"></td></tr>
-                    <tr><td></td><td id="op-isd"></td></tr>
-                    <tr><td></td><td id="op-reconcile"></td></tr>
-                    <tr><td></td><td id="op-last-action"></td></tr>
-                </table>
-                <table id="operator-vars-table"><tbody id="op-vars-tbody"></tbody></table>
-            </div>
+            <div id="operator-content"><!-- elementos movidos para supervisor-panel --></div>
             <div class="resizable-divider" id="resize-divider"></div>
         </div>
     </main>

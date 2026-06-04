@@ -366,6 +366,11 @@ async def reconnect_plant():
     return {"status": "reconnecting"}
 
 
+@app.get("/supervisor")
+async def supervisor_status():
+    return latest_operator_state or {"phase": "Unknown", "connected": False}
+
+
 @app.get("/")
 async def index():
     return FileResponse(str(static_dir / "dashboard" / "index.html"))
