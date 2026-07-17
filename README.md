@@ -1,159 +1,159 @@
 # tep-ihm
 
-IHM (Interface Homem-Maquina) para o experimento Tennessee Eastman. Dashboard web que exibe em tempo real o estado da planta e as decisoes do operator Kubernetes supervisorio.
+HMI (Human-Machine Interface) for the Tennessee Eastman experiment. Web dashboard that displays the plant's state and the supervisory Kubernetes operator's decisions in real time.
 
-## O que ela faz
+## What it does
 
-A IHM conecta em duas fontes de dados e apresenta tudo numa interface web unica:
+The HMI connects to two data sources and presents everything in a single web interface:
 
-| Fonte        | Protocolo                 | O que mostra                                       |
-| ------------ | ------------------------- | -------------------------------------------------- |
-| Planta TEP   | gRPC `StreamMetrics`      | 22 XMEAS, 12 XMV, alarmes, ISD, tempo de simulacao |
-| Operator K8s | API do Kubernetes (watch) | Fase, acoes tomadas, faixas configuradas           |
+| Source       | Protocol                  | What it shows                                       |
+| ------------ | ------------------------- | --------------------------------------------------- |
+| TEP Plant    | gRPC `StreamMetrics`      | 22 XMEAS, 12 XMV, alarms, ISD, simulation time |
+| K8s Operator | Kubernetes API (watch)    | Phase, actions taken, configured ranges             |
 
-Hoje apenas o painel da planta esta implementado. O painel do operator sera ativado com a issue #41, quando a logica supervisoria estiver funcionando.
+Today only the plant panel is implemented. The operator panel will be enabled by issue #41, once the supervisory logic is working.
 
-## Como funciona
+## How it works
 
 ```mermaid
 flowchart TB
-    subgraph Browser["Navegador (localhost:8080)"]
-        UI["Chart.js — gráficos de pressão, temperatura, nível e vazão
-atualizando em tempo real via WebSocket
+    subgraph Browser["Browser (localhost:8080)"]
+        UI["Chart.js — pressure, temperature, level and flow charts
+updating in real time via WebSocket
 
-Tabelas de XMEAS e XMV
-Painel de alarmes"]
+XMEAS and XMV tables
+Alarm panel"]
 
-        API["Backend Python (FastAPI + Uvicorn)
+        API["Python backend (FastAPI + Uvicorn)
 
-1. Conecta na planta via gRPC StreamMetrics
-2. Recebe métricas a cada 500ms
-3. Converte protobuf → JSON
-4. Faz broadcast pra todos os WebSockets conectados"]
+1. Connects to the plant via gRPC StreamMetrics
+2. Receives metrics every 500ms
+3. Converts protobuf → JSON
+4. Broadcasts to all connected WebSockets"]
     end
 
     Plant["te-plant (Rust)
-Container Docker
+Docker container
 gRPC server :50051
-StreamMetrics → XMEAS, XMV, alarmes, ISD"]
+StreamMetrics → XMEAS, XMV, alarms, ISD"]
 
     UI -->|"WebSocket\n(ws://localhost:8080/ws)"| API
-    API -->|"gRPC\n(planta:50051)"| Plant
+    API -->|"gRPC\n(plant:50051)"| Plant
 ```
 
-### Fluxo de dados
+### Data flow
 
-1. O backend abre um **gRPC stream** com a planta (`StreamMetrics`). A planta envia um `PlantMetrics` a cada 500ms (configuravel via `STREAM_INTERVAL_MS`).
-2. O backend converte cada mensagem protobuf em JSON e faz broadcast via **WebSocket** para todos os navegadores conectados.
-3. O frontend recebe o JSON e atualiza 4 graficos Chart.js (pressao, temperatura, niveis, vazoes), tabelas de valores atuais (XMEAS e XMV), e o painel de alarmes.
-4. Se a planta entrar em **emergency shutdown** (ISD), um banner vermelho aparece no topo da tela.
-5. Se o gRPC cair, o backend tenta reconectar a cada 3 segundos. Se o WebSocket cair, o frontend tenta reconectar a cada 2 segundos.
+1. The backend opens a **gRPC stream** with the plant (`StreamMetrics`). The plant sends a `PlantMetrics` message every 500ms (configurable via `STREAM_INTERVAL_MS`).
+2. The backend converts each protobuf message to JSON and broadcasts it via **WebSocket** to all connected browsers.
+3. The frontend receives the JSON and updates 4 Chart.js charts (pressure, temperature, levels, flows), current-value tables (XMEAS and XMV), and the alarm panel.
+4. If the plant enters **emergency shutdown** (ISD), a red banner appears at the top of the screen.
+5. If the gRPC connection drops, the backend retries every 3 seconds. If the WebSocket drops, the frontend retries every 2 seconds.
 
-### Reconexao automatica
+### Automatic reconnection
 
-Tanto o backend quanto o frontend tem reconexao automatica. Voce pode iniciar a IHM antes da planta — quando a planta subir, a conexao se estabelece sozinha.
+Both the backend and the frontend have automatic reconnection. You can start the HMI before the plant — when the plant comes up, the connection is established on its own.
 
 ## Stack
 
-| Camada                 | Tecnologia                                      | Por que                                                                                                         |
-| ---------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Backend                | **FastAPI** (Python)                            | Framework async com suporte nativo a WebSocket. Leve e sem boilerplate.                                         |
-| Servidor ASGI          | **Uvicorn**                                     | Servidor async de alta performance pra FastAPI.                                                                 |
-| gRPC client            | **grpcio** + stubs gerados por **grpcio-tools** | Consome o `StreamMetrics` da planta. Os stubs sao gerados a partir do mesmo `.proto` da planta.                 |
-| Serialização           | **Protocol Buffers** (protobuf)                 | Formato binario usado pela planta. O backend converte pra JSON antes de enviar pro frontend.                    |
-| Comunicacao tempo real | **WebSocket**                                   | Conexao persistente entre backend e frontend. Mais eficiente que polling HTTP pra dados que mudam a cada 500ms. |
-| Graficos               | **Chart.js 4** (CDN)                            | Biblioteca de graficos leve, sem build step. Renderiza diretamente no canvas do navegador.                      |
-| Frontend               | **HTML + CSS + JS puro**                        | Sem framework (React, Vue, etc). O dashboard é simples o suficiente pra nao precisar.                           |
+| Layer                   | Technology                                      | Why                                                                                                              |
+| ------------------------ | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Backend                 | **FastAPI** (Python)                            | Async framework with native WebSocket support. Lightweight, no boilerplate.                                     |
+| ASGI server             | **Uvicorn**                                     | High-performance async server for FastAPI.                                                                       |
+| gRPC client             | **grpcio** + stubs generated by **grpcio-tools** | Consumes the plant's `StreamMetrics`. Stubs are generated from the same `.proto` as the plant.                  |
+| Serialization           | **Protocol Buffers** (protobuf)                 | Binary format used by the plant. The backend converts it to JSON before sending it to the frontend.             |
+| Real-time communication | **WebSocket**                                   | Persistent connection between backend and frontend. More efficient than HTTP polling for data changing every 500ms. |
+| Charts                  | **Chart.js 4** (CDN)                            | Lightweight charting library, no build step. Renders directly on the browser canvas.                            |
+| Frontend                | **Plain HTML + CSS + JS**                       | No framework (React, Vue, etc). The dashboard is simple enough not to need one.                                 |
 
-## Dependencias
+## Dependencies
 
 ### Runtime
 
 - **Python >= 3.11**
-- **Planta TEP rodando** e acessivel via gRPC (default: `localhost:50051`)
+- **TEP plant running** and reachable via gRPC (default: `localhost:50051`)
 
-### Pacotes Python (gerenciados pelo Poetry)
+### Python packages (managed by Poetry)
 
-| Pacote            | Versao | Uso                                          |
-| ----------------- | ------ | -------------------------------------------- |
-| fastapi           | ^0.115 | Framework web async                          |
-| uvicorn[standard] | ^0.34  | Servidor ASGI                                |
-| websockets        | ^15.0  | Implementacao WebSocket pro Uvicorn          |
-| grpcio            | ^1.72  | Client gRPC                                  |
-| grpcio-tools      | ^1.72  | Gerador de stubs Python a partir do `.proto` |
-| protobuf          | ^6.30  | Runtime protobuf                             |
+| Package            | Version | Use                                          |
+| ----------------- | ------ | --------------------------------------------- |
+| fastapi           | ^0.115 | Async web framework                          |
+| uvicorn[standard] | ^0.34  | ASGI server                                   |
+| websockets        | ^15.0  | WebSocket implementation for Uvicorn          |
+| grpcio            | ^1.72  | gRPC client                                   |
+| grpcio-tools      | ^1.72  | Python stub generator from `.proto`          |
+| protobuf          | ^6.30  | protobuf runtime                              |
 
 ### Dev
 
-| Pacote | Uso                |
-| ------ | ------------------ |
-| ruff   | Linter e formatter |
+| Package | Use                 |
+| ------ | -------------------- |
+| ruff   | Linter and formatter |
 
-### Externos (nao sao pacotes Python)
+### External (not Python packages)
 
-- **Docker** — pra rodar a planta como container
-- **Proto file** — `proto/tep/v1/plant.proto` copiado do repo `tep-plant`. Os stubs em `gen/` sao gerados a partir dele e nao vao pro git.
+- **Docker** — to run the plant as a container
+- **Proto file** — `proto/tep/v1/plant.proto` copied from the `tep-plant` repo. Stubs in `gen/` are generated from it and are not committed to git.
 
 ## Setup
 
 ```bash
-# 1. Instalar dependencias
+# 1. Install dependencies
 poetry install
 
-# 2. Gerar stubs gRPC (necessario na primeira vez e quando o proto mudar)
+# 2. Generate gRPC stubs (required the first time and whenever the proto changes)
 poetry run python -m grpc_tools.protoc \
   -I proto \
   --python_out=gen \
   --grpc_python_out=gen \
   proto/tep/v1/plant.proto
 
-# 3. Rodar (planta precisa estar acessivel na porta 50051)
+# 3. Run (the plant must be reachable on port 50051)
 poetry run python src/server.py
 ```
 
-Acesse `http://localhost:8080`
+Visit `http://localhost:8080`
 
-### Variaveis de ambiente
+### Environment variables
 
-| Variavel             | Default           | Descricao                              |
-| -------------------- | ----------------- | -------------------------------------- |
-| `PLANT_ADDRESS`      | `localhost:50051` | Endereco gRPC da planta                |
-| `STREAM_INTERVAL_MS` | `500`             | Intervalo de amostragem do stream (ms) |
-| `PORT`               | `8080`            | Porta HTTP do dashboard                |
+| Variable              | Default           | Description                             |
+| -------------------- | ----------------- | --------------------------------------- |
+| `PLANT_ADDRESS`      | `localhost:50051` | Plant's gRPC address                    |
+| `STREAM_INTERVAL_MS` | `500`             | Stream sampling interval (ms)           |
+| `PORT`               | `8080`            | Dashboard's HTTP port                   |
 
-## Estrutura do projeto
+## Project structure
 
 ```
 tep-ihm/
-├── proto/tep/v1/plant.proto   # Definicao do servico gRPC (copiado da planta)
-├── gen/                       # Stubs Python gerados (gitignored)
+├── proto/tep/v1/plant.proto   # gRPC service definition (copied from the plant)
+├── gen/                       # Generated Python stubs (gitignored)
 ├── src/
-│   └── server.py              # Backend FastAPI + gRPC client + WebSocket
+│   └── server.py              # FastAPI backend + gRPC client + WebSocket
 ├── static/
 │   ├── index.html             # Dashboard HTML
-│   ├── app.js                 # Logica dos graficos e WebSocket
-│   └── style.css              # Visual dark theme
-├── pyproject.toml             # Dependencias (Poetry)
-└── Dockerfile                 # Container da IHM
+│   ├── app.js                 # Chart and WebSocket logic
+│   └── style.css              # Dark theme visuals
+├── pyproject.toml             # Dependencies (Poetry)
+└── Dockerfile                 # HMI container
 ```
 
-## Melhorias planejadas
+## Planned improvements
 
-### Curto prazo
-- **Dockerfile** — containerizar a IHM pra rodar ao lado da planta e do Kind sem precisar de Poetry/Python instalado
-- **Painel do operator** — mostrar fase (Stable/Transient/Alarm), faixas configuradas, historico de acoes. Depende da #41.
-- **Selecao de XMEAS** — permitir escolher quais variaveis aparecem nos graficos em vez de ter graficos fixos
+### Short term
+- **Dockerfile** — containerize the HMI so it runs alongside the plant and Kind without needing Poetry/Python installed
+- **Operator panel** — show phase (Stable/Transient/Alarm), configured ranges, action history. Depends on #41.
+- **XMEAS selection** — allow choosing which variables appear on the charts instead of fixed charts
 
-### Medio prazo
-- **Historico persistente** — salvar metricas num SQLite ou arquivo pra poder ver historico mesmo depois de reiniciar
-- **Marcadores de eventos** — mostrar no grafico quando o operator tomou uma acao (linha vertical + anotacao)
-- **Export CSV** — botao pra exportar os dados visíveis
-- **Graficos XMV** — adicionar graficos das variaveis manipuladas, nao so as medidas
+### Medium term
+- **Persistent history** — save metrics to SQLite or a file to view history even after a restart
+- **Event markers** — show on the chart when the operator took an action (vertical line + annotation)
+- **CSV export** — button to export the visible data
+- **XMV charts** — add charts for the manipulated variables, not just the measured ones
 
-### Longo prazo
-- **Painel de disturbios** — mostrar IDVs ativos na planta (quando expostos via gRPC)
-- **Multi-planta** — conectar em mais de uma instancia da planta ao mesmo tempo
+### Long term
+- **Disturbance panel** — show active IDVs on the plant (once exposed via gRPC)
+- **Multi-plant** — connect to more than one plant instance at the same time
 
 ## Issues
 
-- [#42 — IHM / Dashboard](https://github.com/orgs/Green-Cinnamon-Labs/projects/6/views/1?pane=issue&itemId=167881610&issue=Green-Cinnamon-Labs%7Cspec-tennessee-eastman%7C42)
+- [#42 — HMI / Dashboard](https://github.com/orgs/Green-Cinnamon-Labs/projects/6/views/1?pane=issue&itemId=167881610&issue=Green-Cinnamon-Labs%7Cspec-tennessee-eastman%7C42)
