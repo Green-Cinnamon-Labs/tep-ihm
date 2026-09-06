@@ -434,9 +434,11 @@ function update(data) {
     if ($btnReconnect) $btnReconnect.style.display = 'none';
 
     const { t_h, xmeas, xmv, alarms, deriv_norm, isd_active } = data;
+    const simTimeKnown = typeof t_h === 'number' && Number.isFinite(t_h);
 
-    // Header
-    $simTime.textContent = `t = ${t_h.toFixed(2)} h`;
+    // Header — t_h vem null enquanto a fonte for OPC-UA (sem node de tempo simulado ainda,
+    // spec-tennessee-eastman#61): mostra N/A em vez de fingir um valor.
+    $simTime.textContent = simTimeKnown ? `t = ${t_h.toFixed(2)} h` : 't = N/A';
 
     // ISD
     $isdBanner.hidden = !isd_active;
@@ -474,8 +476,9 @@ function update(data) {
         updateAlarms(xmeas);
     }
 
-    // Time label for charts
-    const label = t_h.toFixed(1);
+    // Time label for charts — sem t_h, usa um índice de amostra só pra manter o eixo avançando
+    // (não é tempo, não leva unidade; ver nota acima sobre simTimeKnown).
+    const label = simTimeKnown ? t_h.toFixed(1) : String(timeLabels.length);
     timeLabels.push(label);
     if (timeLabels.length > MAX_POINTS) timeLabels.shift();
 
