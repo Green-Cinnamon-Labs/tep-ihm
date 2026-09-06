@@ -2,7 +2,7 @@
 tep-ihm — servidor FastAPI com WebSocket para streaming de métricas da planta TEP.
 
 Dois modos de operação:
-  - gRPC: conecta na planta real via StreamMetrics (default)
+  - OPC-UA: conecta na planta real via monjolo::adapter::opcua (default)
   - CSV replay: lê um CSV de simulação em loop (set CSV_REPLAY=<path>)
 """
 
@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import persistence
 
 
-PLANT_ADDRESS = os.environ.get("PLANT_ADDRESS", "localhost:50051")
+OPCUA_ENDPOINT = os.environ.get("OPCUA_ENDPOINT", "opc.tcp://127.0.0.1:4840/tep/server/")
 STREAM_INTERVAL_MS = float(os.environ.get("STREAM_INTERVAL_MS", "500"))
 CSV_REPLAY = os.environ.get("CSV_REPLAY", "")
 K8S_ENABLED = os.environ.get("K8S_ENABLED", "true").lower() not in ("0", "false", "no")
@@ -33,6 +33,74 @@ K8S_SERVER  = os.environ.get("K8S_SERVER", "")   # ex: https://host.docker.inter
 ACTIVE_IDV = []  # Controlled via /disturbances/update endpoint
 IDV_MAGNITUDES: dict[int, float] = {4: 5.0}  # magnitude por IDV (padrão: IDV4 = +5°C)
 RECORD_CSV_PATH = os.environ.get("RECORD_CSV_PATH", "/data/recording.csv")
+
+# Ordem canônica XMEAS(1..41)/XMV(1..12) (Downs & Vogel, 1993), mapeada pra chave/node OPC-UA
+# real exposta por monjolo::adapter::opcua sob a pasta "Signals" — verificado contra os
+# `#[monjolo::sensor(key=...)]`/`#[monjolo::actuator(key=...)]` de tep-plant/src/{sensors,actuators}/,
+# não contra a literatura sozinha. `status.shutdown_detected` é um diagnóstico à parte (ex-isd_active
+# do gRPC), fora da contagem 41+12.
+XMEAS_NODE_NAMES = [
+    "xmeas.stream1.flow_rate",
+    "xmeas.stream2.flow_rate",
+    "xmeas.stream3.flow_rate",
+    "xmeas.stream4.flow_rate",
+    "xmeas.stream8.flow_rate",
+    "xmeas.stream6.flow_rate",
+    "xmeas.reactor.pressure",
+    "xmeas.reactor.level",
+    "xmeas.reactor.temperature",
+    "xmeas.stream9.flow_rate",
+    "xmeas.separator.temperature",
+    "xmeas.separator.level",
+    "xmeas.separator.pressure",
+    "xmeas.stream10.flow_rate",
+    "xmeas.stripper.level",
+    "xmeas.stripper.pressure",
+    "xmeas.stream11.flow_rate",
+    "xmeas.stripper.temperature",
+    "xmeas.stripper.steam_flow_rate",
+    "xmeas.compressor.work",
+    "xmeas.reactor.cooling_water_outlet_temperature",
+    "xmeas.separator.cooling_water_outlet_temperature",
+    "xmeas.stream6.component.a",
+    "xmeas.stream6.component.b",
+    "xmeas.stream6.component.c",
+    "xmeas.stream6.component.d",
+    "xmeas.stream6.component.e",
+    "xmeas.stream6.component.f",
+    "xmeas.stream9.component.a",
+    "xmeas.stream9.component.b",
+    "xmeas.stream9.component.c",
+    "xmeas.stream9.component.d",
+    "xmeas.stream9.component.e",
+    "xmeas.stream9.component.f",
+    "xmeas.stream9.component.g",
+    "xmeas.stream9.component.h",
+    "xmeas.stream11.component.d",
+    "xmeas.stream11.component.e",
+    "xmeas.stream11.component.f",
+    "xmeas.stream11.component.g",
+    "xmeas.stream11.component.h",
+]
+assert len(XMEAS_NODE_NAMES) == 41
+
+XMV_NODE_NAMES = [
+    "valve.feed_d.position",
+    "valve.feed_e.position",
+    "valve.feed_a.position",
+    "valve.feed_ac.position",
+    "valve.compressor_recycle.position",
+    "valve.purge.position",
+    "valve.separator_underflow.position",
+    "valve.stripper_product.position",
+    "valve.stripper_steam.position",
+    "valve.reactor_cooling_water.position",
+    "valve.condenser_cooling_water.position",
+    "agitator.speed",
+]
+assert len(XMV_NODE_NAMES) == 12
+
+SHUTDOWN_NODE_NAME = "status.shutdown_detected"
 
 connected_clients: set[WebSocket] = set()
 latest_snapshot: dict | None = None
@@ -81,6 +149,10 @@ def _close_csv():
 def _append_row(snapshot: dict):
     """Appenda uma linha ao CSV com os dados do snapshot atual. Só grava se _recording_active."""
     if _csv_writer is None or not _recording_active:
+        return
+    if snapshot.get("t_h") is None:
+        # Sem tempo simulado disponível (fonte OPC-UA, ver #61) — sem eixo de tempo não há
+        # o que gravar; a amostra é descartada em vez de forjar um t_h.
         return
     op_phase = (latest_operator_state or {}).get("phase", "")
     xmeas = snapshot.get("xmeas", [])
@@ -162,7 +234,7 @@ async def csv_replay_loop():
         print("[ihm] CSV terminou, reiniciando loop...")
 
 
-# ── gRPC Stream ───────────────────────────────────────────────────────────────
+# ── OPC-UA Stream ─────────────────────────────────────────────────────────────
 
 async def broadcast_status(msg: dict):
     """Envia mensagem de status (sem gravar em CSV) para todos os WebSockets."""
@@ -176,64 +248,75 @@ async def broadcast_status(msg: dict):
     connected_clients.difference_update(disconnected)
 
 
+async def _resolve_signal_nodes(client) -> dict:
+    """Faz o browse de Objects → "Signals" (pasta criada por monjolo::adapter::opcua::serve())
+    e devolve um dict {nome_do_node: Node}. Mesma estratégia do cliente de referência
+    (monjolo/examples/opcua_browse.rs): casa por browse name em vez de assumir um índice de
+    namespace fixo, já que esse índice é atribuído em tempo de execução pelo servidor."""
+    objects = client.get_objects_node()
+    signals_folder = None
+    for node in await objects.get_children():
+        if (await node.read_browse_name()).Name == "Signals":
+            signals_folder = node
+            break
+    if signals_folder is None:
+        raise RuntimeError('pasta "Signals" não encontrada — o servidor OPC-UA subiu sem sensores/atuadores?')
+
+    nodes_by_name = {}
+    for node in await signals_folder.get_children():
+        name = (await node.read_browse_name()).Name
+        nodes_by_name[name] = node
+    return nodes_by_name
+
+
 async def plant_stream_loop():
-    """Tenta conectar na planta via gRPC até _MAX_PLANT_RETRIES vezes.
+    """Tenta conectar na planta via OPC-UA até _MAX_PLANT_RETRIES vezes.
     Após esgotar as tentativas, para e notifica os clientes via WebSocket."""
     global _plant_connection_failed
-    import grpc
-
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "gen"))
-    from tep.v1 import plant_pb2, plant_pb2_grpc
+    from asyncua import Client, ua
 
     retries = 0
+    required_names = XMEAS_NODE_NAMES + XMV_NODE_NAMES + [SHUTDOWN_NODE_NAME]
 
     while retries < _MAX_PLANT_RETRIES:
-        channel = None
         try:
-            channel = grpc.aio.insecure_channel(PLANT_ADDRESS)
-            stub = plant_pb2_grpc.PlantServiceStub(channel)
-            request = plant_pb2.StreamMetricsRequest(interval_ms=STREAM_INTERVAL_MS)
-            stream = stub.StreamMetrics(request)
+            async with Client(url=OPCUA_ENDPOINT) as client:
+                nodes_by_name = await _resolve_signal_nodes(client)
+                missing = [name for name in required_names if name not in nodes_by_name]
+                if missing:
+                    raise RuntimeError(f"nodes ausentes em Signals: {missing}")
+                read_nodes = [nodes_by_name[name] for name in required_names]
 
-            _connected = False
-            async for metrics in stream:
-                if not _connected:
-                    print(f"[ihm] conectado na planta em {PLANT_ADDRESS}")
-                    retries = 0
-                    _plant_connection_failed = False
-                    _connected = True
-                    # Reenviar estado ativo ao reconectar (planta pode ter reiniciado)
-                    if ACTIVE_IDV or IDV_MAGNITUDES:
-                        try:
-                            resync_stub = plant_pb2_grpc.PlantServiceStub(channel)
-                            resync_req = plant_pb2.UpdateDisturbancesRequest(
-                                active_idv=[int(x) for x in ACTIVE_IDV],
-                                idv_magnitudes={int(k): float(v) for k, v in IDV_MAGNITUDES.items()},
-                            )
-                            await resync_stub.UpdateDisturbances(resync_req)
-                            print(f"[ihm] estado IDV reenviado à planta: {ACTIVE_IDV}")
-                        except Exception as resync_err:
-                            print(f"[ihm] aviso: falha ao reenviar IDV: {resync_err}")
-                snapshot = {
-                    "t_h": metrics.t_h,
-                    "xmeas": list(metrics.xmeas),
-                    "xmv": list(metrics.xmv),
-                    "alarms": [
-                        {"variable": a.variable, "condition": a.condition, "active": a.active}
-                        for a in metrics.alarms
-                    ],
-                    "deriv_norm": metrics.deriv_norm,
-                    "isd_active": metrics.isd_active,
-                }
-                await broadcast(snapshot)
+                print(f"[ihm] conectado na planta OPC-UA em {OPCUA_ENDPOINT}")
+                retries = 0
+                _plant_connection_failed = False
+                interval = STREAM_INTERVAL_MS / 1000.0
 
-        except grpc.aio.AioRpcError as e:
+                while True:
+                    values = await client.read_values(read_nodes)
+                    xmeas = [float(v) for v in values[:41]]
+                    xmv = [float(v) for v in values[41:53]]
+                    isd_active = bool(values[53])
+                    snapshot = {
+                        # Sem node OPC-UA pra tempo simulado/alarmes/deriv_norm hoje — ver #61.
+                        # `None` de propósito: não estimar, só marcar como indisponível.
+                        "t_h": None,
+                        "xmeas": xmeas,
+                        "xmv": xmv,
+                        "alarms": [],
+                        "deriv_norm": None,
+                        "isd_active": isd_active,
+                    }
+                    await broadcast(snapshot)
+                    await asyncio.sleep(interval)
+
+        except ua.UaError as e:
             retries += 1
             if retries < _MAX_PLANT_RETRIES:
-                print(f"[ihm] gRPC erro: {e.code()} — tentativa {retries}/{_MAX_PLANT_RETRIES}, reconectando em 3s...")
+                print(f"[ihm] OPC-UA erro: {e} — tentativa {retries}/{_MAX_PLANT_RETRIES}, reconectando em 3s...")
                 await asyncio.sleep(3)
             else:
-                print(f"[ihm] gRPC erro: {e.code()} — {_MAX_PLANT_RETRIES} tentativas esgotadas. Aguardando reconexão manual.")
+                print(f"[ihm] OPC-UA erro: {e} — {_MAX_PLANT_RETRIES} tentativas esgotadas. Aguardando reconexão manual.")
 
         except Exception as e:
             retries += 1
@@ -242,13 +325,6 @@ async def plant_stream_loop():
                 await asyncio.sleep(3)
             else:
                 print(f"[ihm] erro inesperado: {e} — {_MAX_PLANT_RETRIES} tentativas esgotadas. Aguardando reconexão manual.")
-
-        finally:
-            if channel:
-                try:
-                    await channel.close()
-                except Exception:
-                    pass
 
     _plant_connection_failed = True
     await broadcast_status({"plant_connection": "failed"})
@@ -327,8 +403,8 @@ async def lifespan(app: FastAPI):
     _default_db = str(Path(__file__).resolve().parent.parent / "data" / "sessions.db")
     db_path = os.environ.get("SQLITE_DB_PATH", _default_db)
     persistence.init_db(db_path)
-    source_type = "csv_replay" if CSV_REPLAY else "grpc"
-    address = CSV_REPLAY if CSV_REPLAY else PLANT_ADDRESS
+    source_type = "csv_replay" if CSV_REPLAY else "opcua"
+    address = CSV_REPLAY if CSV_REPLAY else OPCUA_ENDPOINT
     persistence.get_or_create_data_source(
         name=f"TEP Plant ({source_type})",
         source_type=source_type,
@@ -409,148 +485,53 @@ async def stop_recording():
     return {"status": "ok", "path": RECORD_CSV_PATH, "recording": False}
 
 
+# monjolo::adapter::opcua só expõe Sensors/Actuators da planta física — não tem equivalente pra
+# ciclo de vida da simulação (pause/resume/reset), velocidade ou distúrbios IDV. Os 4 endpoints
+# abaixo continuam existindo (o frontend depende de {"status": ...}/resp.ok pra atualizar a UI),
+# mas não aplicam mais nada de verdade na planta — só respondem e logam um aviso uma vez. Ver
+# spec-tennessee-eastman#61 (controle/velocidade) e #62 (distúrbios) pro que falta em tep-plant.
+
 @app.post("/simulation/control")
 async def control_simulation(payload: dict):
-    """Controla simulação (pause, resume). Recebe { 'action': 'pause'|'resume' }."""
-    try:
-        import grpc
-        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "gen"))
-        from tep.v1 import plant_pb2, plant_pb2_grpc
-
-        action_str = payload.get("action", "").lower()
-        action_map = {
-            "pause": plant_pb2.ControlSimulationRequest.Action.PAUSE,
-            "resume": plant_pb2.ControlSimulationRequest.Action.RESUME,
-            "reset": plant_pb2.ControlSimulationRequest.Action.RESET,
-        }
-
-        if action_str not in action_map:
-            return Response(f"Ação inválida: {action_str}", status_code=400, media_type="text/plain")
-
-        # Envia comando para planta via gRPC (não-blocking)
-        if not CSV_REPLAY:
-            async def send_control_command():
-                try:
-                    channel = grpc.aio.insecure_channel(PLANT_ADDRESS)
-                    stub = plant_pb2_grpc.PlantServiceStub(channel)
-                    request = plant_pb2.ControlSimulationRequest(action=action_map[action_str])
-                    response = await stub.ControlSimulation(request)
-                    await channel.close()
-                    print(f"[ihm] simulação {action_str}: {response.message}")
-                except Exception as plant_err:
-                    print(f"[ihm] aviso: não pude controlar simulação: {plant_err}")
-
-            asyncio.create_task(send_control_command())
-
-        return {"status": "ok", "action": action_str}
-    except Exception as e:
-        print(f"[ihm] erro ao controlar simulação: {e}")
-        return Response(f"Erro: {e}", status_code=400, media_type="text/plain")
+    """Controla simulação (pause, resume, reset). Recebe { 'action': 'pause'|'resume'|'reset' }."""
+    action_str = payload.get("action", "").lower()
+    if action_str not in ("pause", "resume", "reset"):
+        return Response(f"Ação inválida: {action_str}", status_code=400, media_type="text/plain")
+    print(f"[ihm] simulação {action_str}: sem equivalente OPC-UA ainda (spec-tennessee-eastman#61) — ignorado")
+    return {"status": "unsupported", "action": action_str}
 
 
 @app.post("/simulation/speed")
 async def set_simulation_speed(payload: dict):
     """Define velocidade de simulação. Recebe { 'factor': 0.0 } (0=max, 1=real-time, N=Nx)."""
-    try:
-        import grpc
-        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "gen"))
-        from tep.v1 import plant_pb2, plant_pb2_grpc
-
-        factor = float(payload.get("factor", 1.0))
-
-        if not CSV_REPLAY:
-            async def _send():
-                try:
-                    channel = grpc.aio.insecure_channel(PLANT_ADDRESS)
-                    stub = plant_pb2_grpc.PlantServiceStub(channel)
-                    req = plant_pb2.SetSpeedRequest(factor=factor)
-                    resp = await stub.SetSpeed(req)
-                    await channel.close()
-                    print(f"[ihm] velocidade → factor={resp.factor}")
-                except Exception as err:
-                    print(f"[ihm] aviso: não pude ajustar velocidade: {err}")
-
-            asyncio.create_task(_send())
-
-        return {"status": "ok", "factor": factor}
-    except Exception as e:
-        print(f"[ihm] erro ao ajustar velocidade: {e}")
-        return Response(f"Erro: {e}", status_code=400, media_type="text/plain")
+    factor = float(payload.get("factor", 1.0))
+    print(f"[ihm] velocidade -> factor={factor}: sem equivalente OPC-UA ainda (spec-tennessee-eastman#61) — ignorado")
+    return {"status": "unsupported", "factor": factor}
 
 
 @app.post("/disturbances/update")
 async def update_disturbances(payload: dict):
-    """Atualiza a lista de distúrbios ativos em tempo real. Recebe { 'active_idv': [list] }."""
+    """Atualiza a lista de distúrbios ativos. Recebe { 'active_idv': [list] }. Só local —
+    sem equivalente OPC-UA ainda (spec-tennessee-eastman#62), não chega a afetar a planta."""
     global ACTIVE_IDV
-    try:
-        import grpc
-        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "gen"))
-        from tep.v1 import plant_pb2, plant_pb2_grpc
-
-        new_active = payload.get("active_idv", [])
-        ACTIVE_IDV = sorted([int(x) for x in new_active if isinstance(x, int)])
-
-        # Atualiza planta via gRPC se conectada (não-blocking)
-        if not CSV_REPLAY:
-            async def update_plant_disturbances():
-                try:
-                    channel = grpc.aio.insecure_channel(PLANT_ADDRESS)
-                    stub = plant_pb2_grpc.PlantServiceStub(channel)
-                    request = plant_pb2.UpdateDisturbancesRequest(
-                        active_idv=[int(x) for x in ACTIVE_IDV],
-                        idv_magnitudes={int(k): float(v) for k, v in IDV_MAGNITUDES.items()},
-                    )
-                    response = await stub.UpdateDisturbances(request)
-                    await channel.close()
-                    print(f"[ihm] disturbios atualizados na planta: {ACTIVE_IDV}")
-                except Exception as plant_err:
-                    print(f"[ihm] aviso: não pude atualizar planta: {plant_err}")
-
-            asyncio.create_task(update_plant_disturbances())
-        else:
-            print(f"[ihm] modo CSV replay: distúrbios apenas locais: {ACTIVE_IDV}")
-
-        return {"status": "ok", "active_idv": ACTIVE_IDV}
-    except Exception as e:
-        print(f"[ihm] erro ao atualizar distúrbios: {e}")
-        return Response(f"Erro: {e}", status_code=400, media_type="text/plain")
+    new_active = payload.get("active_idv", [])
+    ACTIVE_IDV = sorted([int(x) for x in new_active if isinstance(x, int)])
+    print(f"[ihm] distúrbios apenas locais (sem equivalente OPC-UA, spec-tennessee-eastman#62): {ACTIVE_IDV}")
+    return {"status": "ok", "active_idv": ACTIVE_IDV}
 
 
 @app.post("/disturbances/magnitude")
 async def update_idv_magnitude(payload: dict):
-    """Define a magnitude de um IDV step. Recebe { 'idv': 4, 'magnitude': 10.0 }"""
+    """Define a magnitude de um IDV step. Recebe { 'idv': 4, 'magnitude': 10.0 }. Só local —
+    sem equivalente OPC-UA ainda (spec-tennessee-eastman#62), não chega a afetar a planta."""
     global IDV_MAGNITUDES
-    try:
-        import grpc
-        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "gen"))
-        from tep.v1 import plant_pb2, plant_pb2_grpc
-
-        idv_num = int(payload.get("idv", 0))
-        magnitude = float(payload.get("magnitude", 5.0))
-        if idv_num < 1 or idv_num > 20:
-            return Response("IDV inválido", status_code=400, media_type="text/plain")
-
-        IDV_MAGNITUDES[idv_num] = magnitude
-
-        if not CSV_REPLAY:
-            async def _push():
-                try:
-                    channel = grpc.aio.insecure_channel(PLANT_ADDRESS)
-                    stub = plant_pb2_grpc.PlantServiceStub(channel)
-                    req = plant_pb2.UpdateDisturbancesRequest(
-                        active_idv=[int(x) for x in ACTIVE_IDV],
-                        idv_magnitudes={int(k): float(v) for k, v in IDV_MAGNITUDES.items()},
-                    )
-                    await stub.UpdateDisturbances(req)
-                    await channel.close()
-                    print(f"[ihm] IDV({idv_num}) magnitude → {magnitude}")
-                except Exception as err:
-                    print(f"[ihm] aviso: não pude propagar magnitude: {err}")
-            asyncio.create_task(_push())
-
-        return {"status": "ok", "idv": idv_num, "magnitude": magnitude}
-    except Exception as e:
-        return Response(f"Erro: {e}", status_code=400, media_type="text/plain")
+    idv_num = int(payload.get("idv", 0))
+    magnitude = float(payload.get("magnitude", 5.0))
+    if idv_num < 1 or idv_num > 20:
+        return Response("IDV inválido", status_code=400, media_type="text/plain")
+    IDV_MAGNITUDES[idv_num] = magnitude
+    print(f"[ihm] IDV({idv_num}) magnitude -> {magnitude} (apenas local, spec-tennessee-eastman#62)")
+    return {"status": "ok", "idv": idv_num, "magnitude": magnitude}
 
 
 @app.get("/analytics")
@@ -695,7 +676,7 @@ async def websocket_endpoint(ws: WebSocket):
 def main():
     import uvicorn
     port = int(os.environ.get("PORT", "8080"))
-    mode = f"replay CSV ({CSV_REPLAY})" if CSV_REPLAY else f"gRPC ({PLANT_ADDRESS})"
+    mode = f"replay CSV ({CSV_REPLAY})" if CSV_REPLAY else f"OPC-UA ({OPCUA_ENDPOINT})"
     print(f"[ihm] iniciando em http://localhost:{port}")
     print(f"[ihm] modo: {mode}")
     uvicorn.run(app, host="0.0.0.0", port=port)

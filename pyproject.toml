@@ -11,9 +11,7 @@ python = "^3.11"
 fastapi = "^0.115"
 uvicorn = {extras = ["standard"], version = "^0.34"}
 websockets = "^15.0"
-grpcio = "^1.72"
-grpcio-tools = "^1.72"
-protobuf = "^6.30"
+asyncua = "^2.0"
 kubernetes = "^32.0"
 
 [tool.poetry.group.dev.dependencies]

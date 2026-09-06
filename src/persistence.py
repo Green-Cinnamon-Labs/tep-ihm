@@ -60,7 +60,7 @@ def init_db(db_path: Optional[str] = None) -> None:
         CREATE TABLE IF NOT EXISTS data_source (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             name        TEXT NOT NULL,
-            source_type TEXT NOT NULL DEFAULT 'grpc',
+            source_type TEXT NOT NULL DEFAULT 'opcua',
             address     TEXT NOT NULL,
             created_at  INTEGER NOT NULL
         );
@@ -212,8 +212,12 @@ def maybe_append(snapshot: dict) -> bool:
     now = time.time()
     if now - _last_append_wall < 1.0:
         return False
+    t_h = snapshot.get("t_h")
+    if t_h is None:
+        # Sem tempo simulado disponível (fonte OPC-UA, ver spec-tennessee-eastman#61) — a coluna
+        # metrics.t_h é NOT NULL e não há eixo de tempo pra gravar; descarta a amostra.
+        return False
     _last_append_wall = now
-    t_h   = snapshot.get("t_h", 0.0)
     xmeas = snapshot.get("xmeas", [])
     xmv   = snapshot.get("xmv", [])
     conn  = _get_conn()
