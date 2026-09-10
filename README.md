@@ -6,10 +6,10 @@ HMI (Human-Machine Interface) for the Tennessee Eastman experiment. Web dashboar
 
 The HMI connects to two data sources and presents everything in a single web interface:
 
-| Source       | Protocol                  | What it shows                                       |
-| ------------ | ------------------------- | --------------------------------------------------- |
-| TEP Plant    | OPC-UA (polling `Read`)   | 41 XMEAS, 12 XMV, ISD. No simulation time, alarms, or disturbance control yet — see [Known gaps](#known-gaps) |
-| K8s Operator | Kubernetes API (watch)    | Phase, actions taken, configured ranges             |
+| Source       | Protocol                | What it shows                                                                                                 |
+| ------------ | ----------------------- | ------------------------------------------------------------------------------------------------------------- |
+| TEP Plant    | OPC-UA (polling `Read`) | 41 XMEAS, 12 XMV, ISD. No simulation time, alarms, or disturbance control yet — see [Known gaps](#known-gaps) |
+| K8s Operator | Kubernetes API (watch)  | Phase, actions taken, configured ranges                                                                       |
 
 Today only the plant panel is implemented. The operator panel will be enabled by issue #41, once the supervisory logic is working.
 
@@ -54,14 +54,14 @@ Both the backend and the frontend have automatic reconnection. You can start the
 
 ## Stack
 
-| Layer                   | Technology                                      | Why                                                                                                              |
-| ------------------------ | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Backend                 | **FastAPI** (Python)                            | Async framework with native WebSocket support. Lightweight, no boilerplate.                                     |
-| ASGI server             | **Uvicorn**                                     | High-performance async server for FastAPI.                                                                       |
-| OPC-UA client           | **asyncua**                                     | Polls the plant's OPC-UA server (`monjolo::adapter::opcua`) — browses the `Signals` folder once, then batched `Read` on a timer. |
-| Real-time communication | **WebSocket**                                   | Persistent connection between backend and frontend. More efficient than HTTP polling for data changing every 500ms. |
-| Charts                  | **Chart.js 4** (CDN)                            | Lightweight charting library, no build step. Renders directly on the browser canvas.                            |
-| Frontend                | **Plain HTML + CSS + JS**                       | No framework (React, Vue, etc). The dashboard is simple enough not to need one.                                 |
+| Layer                   | Technology                | Why                                                                                                                              |
+| ----------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Backend                 | **FastAPI** (Python)      | Async framework with native WebSocket support. Lightweight, no boilerplate.                                                      |
+| ASGI server             | **Uvicorn**               | High-performance async server for FastAPI.                                                                                       |
+| OPC-UA client           | **asyncua**               | Polls the plant's OPC-UA server (`monjolo::adapter::opcua`) — browses the `Signals` folder once, then batched `Read` on a timer. |
+| Real-time communication | **WebSocket**             | Persistent connection between backend and frontend. More efficient than HTTP polling for data changing every 500ms.              |
+| Charts                  | **Chart.js 4** (CDN)      | Lightweight charting library, no build step. Renders directly on the browser canvas.                                             |
+| Frontend                | **Plain HTML + CSS + JS** | No framework (React, Vue, etc). The dashboard is simple enough not to need one.                                                  |
 
 ## Dependencies
 
@@ -72,18 +72,18 @@ Both the backend and the frontend have automatic reconnection. You can start the
 
 ### Python packages (managed by Poetry)
 
-| Package            | Version | Use                                          |
-| ----------------- | ------ | --------------------------------------------- |
-| fastapi           | ^0.115 | Async web framework                          |
-| uvicorn[standard] | ^0.34  | ASGI server                                   |
-| websockets        | ^15.0  | WebSocket implementation for Uvicorn          |
-| asyncua           | ^2.0   | OPC-UA client                                 |
+| Package           | Version | Use                                  |
+| ----------------- | ------- | ------------------------------------ |
+| fastapi           | ^0.115  | Async web framework                  |
+| uvicorn[standard] | ^0.34   | ASGI server                          |
+| websockets        | ^15.0   | WebSocket implementation for Uvicorn |
+| asyncua           | ^2.0    | OPC-UA client                        |
 
 ### Dev
 
-| Package | Use                 |
-| ------ | -------------------- |
-| ruff   | Linter and formatter |
+| Package | Use                  |
+| ------- | -------------------- |
+| ruff    | Linter and formatter |
 
 ### External (not Python packages)
 
@@ -104,11 +104,11 @@ Visit `http://localhost:8080`
 
 ### Environment variables
 
-| Variable              | Default                                    | Description                             |
-| -------------------- | ------------------------------------------- | --------------------------------------- |
-| `OPCUA_ENDPOINT`     | `opc.tcp://127.0.0.1:4840/tep/server/`      | Plant's OPC-UA endpoint                 |
-| `STREAM_INTERVAL_MS` | `500`                                        | Polling interval (ms)                   |
-| `PORT`               | `8080`                                       | Dashboard's HTTP port                   |
+| Variable             | Default                                | Description             |
+| -------------------- | -------------------------------------- | ----------------------- |
+| `OPCUA_ENDPOINT`     | `opc.tcp://127.0.0.1:4840/tep/server/` | Plant's OPC-UA endpoint |
+| `STREAM_INTERVAL_MS` | `500`                                  | Polling interval (ms)   |
+| `PORT`               | `8080`                                 | Dashboard's HTTP port   |
 
 ## Project structure
 
