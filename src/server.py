@@ -28,7 +28,7 @@ STREAM_INTERVAL_MS = float(os.environ.get("STREAM_INTERVAL_MS", "500"))
 CSV_REPLAY = os.environ.get("CSV_REPLAY", "")
 K8S_ENABLED = os.environ.get("K8S_ENABLED", "true").lower() not in ("0", "false", "no")
 K8S_NAMESPACE = os.environ.get("K8S_NAMESPACE", "default")
-K8S_CR_NAME = os.environ.get("K8S_CR_NAME", "tep-baseline")
+K8S_CR_NAME = os.environ.get("K8S_CR_NAME", "tep")
 K8S_SERVER  = os.environ.get("K8S_SERVER", "")   # ex: https://host.docker.internal:6443
 ACTIVE_IDV = []  # Controlled via /disturbances/update endpoint
 IDV_MAGNITUDES: dict[int, float] = {4: 5.0}  # magnitude por IDV (padrão: IDV4 = +5°C)
@@ -333,29 +333,33 @@ async def plant_stream_loop():
 # ── Kubernetes operator watch ─────────────────────────────────────────────────
 
 def _k8s_watch_sync(custom, w):
-    """Executa o watch síncrono do K8s — chamado via asyncio.to_thread para não bloquear o event loop."""
+    """Executa o watch síncrono do K8s — chamado via asyncio.to_thread para não bloquear o event loop.
+
+    Observa o `Plant` (supervision.greenlabs.io) escrito pelo tep-operator: o veredito da camada
+    supervisória (custo J, metas, restrições, conditions). A IHM não fala com o operator — o
+    `Plant.status` guardado pelo Kubernetes é a fonte única do veredito."""
     global latest_operator_state
     for event in w.stream(
         custom.list_namespaced_custom_object,
-        group="infrastructure.greenlabs.io",
+        group="supervision.greenlabs.io",
         version="v1alpha1",
         namespace=K8S_NAMESPACE,
-        plural="plcmachines",
+        plural="plants",
         field_selector=f"metadata.name={K8S_CR_NAME}",
         timeout_seconds=60,
     ):
         obj = event.get("object", {})
         status = obj.get("status", {})
-        spec = obj.get("spec", {})
         latest_operator_state = {
             "phase": status.get("phase", "Unknown"),
-            "plantTime": status.get("plantTime"),
-            "isdActive": status.get("isdActive", False),
-            "lastReconcileTime": status.get("lastReconcileTime"),
-            "lastAction": status.get("lastAction"),
-            "variables": status.get("variables", []),
-            "observation": status.get("observation", {}),
-            "operatingRanges": spec.get("operatingRanges", []),
+            "activePolicy": status.get("activePolicy"),
+            "cost": status.get("cost"),
+            "terms": status.get("terms", []),
+            "targets": status.get("targets", []),
+            "constraints": status.get("constraints", []),
+            "consecutiveViolations": status.get("consecutiveViolations", 0),
+            "lastEvaluationTime": status.get("lastEvaluationTime"),
+            "conditions": status.get("conditions", []),
         }
 
 
