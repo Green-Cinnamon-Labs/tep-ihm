@@ -165,13 +165,17 @@ async function reconnectPlant() {
 // ── Operator panel ───────────────────────────────────────────────────────────
 
 const $opPhase = document.getElementById('op-phase');
-const $opTime = document.getElementById('op-time');
-const $opIsd = document.getElementById('op-isd');
+const $opPolicy = document.getElementById('op-policy');
+const $opCost = document.getElementById('op-cost');
+const $opViolations = document.getElementById('op-violations');
 const $opReconcile = document.getElementById('op-reconcile');
-const $opLastAction = document.getElementById('op-last-action');
+const $opReason = document.getElementById('op-reason');
 const $opVarsTbody = document.getElementById('op-vars-tbody');
 
-const _SUP_PHASE_CLS = { Stable: 'sup-stable', Transient: 'sup-transient', Alarm: 'sup-alarm', Shutdown: 'sup-alarm' };
+// Fases do Plant (supervision.greenlabs.io) → classes visuais já existentes do painel.
+const _SUP_PHASE_CLS = { Compliant: 'sup-stable', Pending: 'sup-transient', NonCompliant: 'sup-alarm' };
+
+const _fmt = (v, digits = 3) => (v == null ? '--' : Number(v).toFixed(digits));
 
 function renderOperator(op) {
     const badge = document.getElementById('op-phase-badge');
@@ -191,40 +195,45 @@ function renderOperator(op) {
 
     $opPhase.textContent = phase;
     $opPhase.className = phaseCls;
+    $opPolicy.textContent = op.activePolicy || '--';
 
-    $opTime.textContent = op.plantTime != null ? `${op.plantTime.toFixed(2)} h` : '--';
-    $opIsd.textContent = op.isdActive ? 'SIM' : 'não';
-    $opIsd.className = op.isdActive ? 'status-alarm' : '';
-
-    if (op.lastReconcileTime) {
-        const d = new Date(op.lastReconcileTime);
-        $opReconcile.textContent = d.toLocaleTimeString();
+    // Custo J: valor, orçamento da política e referência da função de custo
+    const c = op.cost;
+    if (c) {
+        let text = `${_fmt(c.value, 2)} ${c.unit}`;
+        if (c.maxCost != null)   text += ` / máx ${_fmt(c.maxCost, 1)}`;
+        if (c.reference != null) text += ` (ref ${_fmt(c.reference, 1)})`;
+        $opCost.textContent = text;
+        $opCost.className = c.maxCost != null && c.value > c.maxCost ? 'status-alarm' : '';
     } else {
-        $opReconcile.textContent = '--';
+        $opCost.textContent = '--';
+        $opCost.className = '';
     }
 
-    if (op.lastAction) {
-        const a = op.lastAction;
-        $opLastAction.textContent = `${a.ruleName}: ${a.controllerID}.${a.parameter} → ${a.value}`;
-    } else {
-        $opLastAction.textContent = 'nenhuma';
-    }
+    $opViolations.textContent = String(op.consecutiveViolations || 0);
+    $opReconcile.textContent = op.lastEvaluationTime
+        ? new Date(op.lastEvaluationTime).toLocaleTimeString()
+        : '--';
 
-    // Policy variables table
-    const vars = op.variables || [];
-    $opVarsTbody.innerHTML = vars.map(v => {
-        const meta = XMEAS_META[v.xmeasIndex] || { tag: `XMEAS(${v.xmeasIndex + 1})`, name: '', unit: '' };
-        const inRangeCls = v.inRange ? 'alarm-inactive' : 'alarm-active';
-        const inRangeText = v.inRange ? 'ok' : 'OUT';
-        const trendIcon = { Rising: '↑', Falling: '↓', Stable: '→' }[v.trend] || '?';
-        return `<tr class="${inRangeCls}">
-            <td>${v.name}</td>
-            <td class="tag-xmeas">${meta.tag}</td>
-            <td class="val">${v.value.toFixed(3)} ${meta.unit}</td>
-            <td>${inRangeText}</td>
-            <td>${trendIcon}</td>
-        </tr>`;
-    }).join('');
+    // Motivo: a condition PolicyCompliant resume o veredito; se não houver dado, DataAvailable explica
+    const conds = op.conditions || [];
+    const verdict = conds.find(k => k.type === 'PolicyCompliant');
+    const data = conds.find(k => k.type === 'DataAvailable');
+    const why = data && data.status !== 'True' ? data : verdict;
+    $opReason.textContent = why ? `${why.reason}: ${why.message}` : '--';
+
+    // Metas e restrições da política ativa
+    const rows = [
+        ...(op.targets || []).map(t => ({ signal: t.signal, kind: 'meta', observed: t.observed, target: t.target, ok: t.met })),
+        ...(op.constraints || []).map(r => ({ signal: r.signal, kind: 'restrição', observed: r.observed, target: null, ok: r.satisfied })),
+    ];
+    $opVarsTbody.innerHTML = rows.map(r => `<tr class="${r.ok ? 'alarm-inactive' : 'alarm-active'}">
+            <td>${r.signal}</td>
+            <td>${r.kind}</td>
+            <td class="val">${_fmt(r.observed)}</td>
+            <td class="val">${r.target == null ? '—' : _fmt(r.target)}</td>
+            <td>${r.ok ? 'ok' : 'OUT'}</td>
+        </tr>`).join('');
 }
 
 // ── IDV metadata ─────────────────────────────────────────────────────────────
