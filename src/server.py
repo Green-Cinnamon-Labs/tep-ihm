@@ -335,7 +335,7 @@ async def plant_stream_loop():
 def _k8s_watch_sync(custom, w):
     """Executa o watch síncrono do K8s — chamado via asyncio.to_thread para não bloquear o event loop.
 
-    Observa o `Plant` (supervision.greenlabs.io) escrito pelo tep-operator: o veredito da camada
+    Observa o `Plant` (supervision.greenlabs.io) escrito pelo plant-supervisor: o veredito da camada
     supervisória (custo J, metas, restrições, conditions). A IHM não fala com o operator — o
     `Plant.status` guardado pelo Kubernetes é a fonte única do veredito."""
     global latest_operator_state
