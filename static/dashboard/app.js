@@ -171,6 +171,17 @@ const $opViolations = document.getElementById('op-violations');
 const $opReconcile = document.getElementById('op-reconcile');
 const $opReason = document.getElementById('op-reason');
 const $opVarsTbody = document.getElementById('op-vars-tbody');
+const $opLoops = document.getElementById('op-loops');
+const $opLoopsSection = document.getElementById('op-loops-section');
+const $opLoopsTbody = document.getElementById('op-loops-tbody');
+
+// ControlLoopsHealthy (segundo nível de observação, spec #85) → texto e classe do painel.
+// Separado da Phase: a fase só reflete o veredito econômico.
+const _LOOPS_STATUS = {
+    True:    { text: 'saudáveis',    cls: 'sup-stable' },
+    False:   { text: 'degradadas',   cls: 'sup-alarm' },
+    Unknown: { text: 'sem veredito', cls: 'sup-transient' },
+};
 
 // Fases do Plant (supervision.greenlabs.io) → classes visuais já existentes do painel.
 const _SUP_PHASE_CLS = { Compliant: 'sup-stable', Pending: 'sup-transient', NonCompliant: 'sup-alarm' };
@@ -234,6 +245,37 @@ function renderOperator(op) {
             <td class="val">${r.target == null ? '—' : _fmt(r.target)}</td>
             <td>${r.ok ? 'ok' : 'OUT'}</td>
         </tr>`).join('');
+
+    renderLoops(op);
+}
+
+// Malhas de controle: veredito ControlLoopsHealthy na tabela de meta + uma linha por malha.
+function renderLoops(op) {
+    const loops = op.loops || [];
+    $opLoopsSection.hidden = loops.length === 0;
+    const cond = (op.conditions || []).find(k => k.type === 'ControlLoopsHealthy');
+    if (!cond) {
+        $opLoops.textContent = loops.length ? '--' : 'não declaradas';
+        $opLoops.className = '';
+    } else {
+        const st = _LOOPS_STATUS[cond.status] || _LOOPS_STATUS.Unknown;
+        $opLoops.textContent = `${st.text} — ${cond.message}`;
+        $opLoops.className = st.cls;
+    }
+
+    $opLoopsTbody.innerHTML = loops.map(l => {
+        let state = 'ok', cls = 'sup-stable';
+        if (!l.evaluated)    { state = 'não julgada'; cls = 'sup-transient'; }
+        else if (!l.healthy) { state = 'degradada';   cls = 'sup-alarm'; }
+        const why = l.reason ? ` title="${l.reason}"` : '';
+        return `<tr>
+            <td>${l.name}</td>
+            <td class="val">${_fmt(l.predictability, 2)}</td>
+            <td class="val">${_fmt(l.offset, 3)}</td>
+            <td class="val">${_fmt(l.outputStd, 3)}</td>
+            <td class="${cls}"${why}>${state}</td>
+        </tr>`;
+    }).join('');
 }
 
 // ── IDV metadata ─────────────────────────────────────────────────────────────

@@ -853,7 +853,7 @@ main {
     bottom: 16px;
     left: 16px;
     width: 380px;
-    max-height: 420px;
+    max-height: min(640px, 80vh);
     background: #0d1b2a;
     border: 1px solid #1e3a5f;
     border-radius: 6px;
