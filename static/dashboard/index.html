@@ -59,12 +59,20 @@
                 <tr><td>Violações</td>  <td id="op-violations">--</td></tr>
                 <tr><td>Avaliação</td>  <td id="op-reconcile">--</td></tr>
                 <tr><td>Motivo</td>     <td id="op-reason">--</td></tr>
+                <tr><td>Malhas</td>     <td id="op-loops">--</td></tr>
             </table>
             <div class="sup-vars-label">Metas e restrições da política</div>
             <table class="sup-vars-table">
                 <thead><tr><th>Sinal</th><th>Tipo</th><th>Observado</th><th>Alvo</th><th>Estado</th></tr></thead>
                 <tbody id="op-vars-tbody"></tbody>
             </table>
+            <div id="op-loops-section" hidden>
+                <div class="sup-vars-label">Malhas de controle — Predictability Index</div>
+                <table class="sup-vars-table">
+                    <thead><tr><th>Malha</th><th>PI</th><th>Offset</th><th>σ válvula</th><th>Estado</th></tr></thead>
+                    <tbody id="op-loops-tbody"></tbody>
+                </table>
+            </div>
         </div>
     </div>
 

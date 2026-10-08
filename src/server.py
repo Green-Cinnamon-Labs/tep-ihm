@@ -358,6 +358,9 @@ def _k8s_watch_sync(custom, w):
             "targets": status.get("targets", []),
             "constraints": status.get("constraints", []),
             "consecutiveViolations": status.get("consecutiveViolations", 0),
+            # Segundo nível de observação (spec #85): qualidade das malhas de controle
+            "loops": status.get("loops", []),
+            "consecutiveLoopViolations": status.get("consecutiveLoopViolations", 0),
             "lastEvaluationTime": status.get("lastEvaluationTime"),
             "conditions": status.get("conditions", []),
         }
